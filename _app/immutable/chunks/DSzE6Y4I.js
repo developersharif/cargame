@@ -1,0 +1,1 @@
+import{w as t}from"./CcETWVYL.js";const s={graphics:{quality:"medium",shadows:!0,reflections:!0,particles:!0,antialiasing:!0,resolution:1},audio:{master:.8,effects:.8,music:.5,engine:.8,spatial:!0},controls:{sensitivity:1},gameplay:{difficulty:"normal",assists:{autoBreak:!1,steeringAssist:!0,stabilization:!0},camera:"chase"}},i=t(s);export{i as s};
