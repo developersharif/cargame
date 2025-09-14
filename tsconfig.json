@@ -10,5 +10,8 @@
     "src/**/*.d.ts",
     "vite.config.ts",
     "svelte.config.js"
+  ],
+  "exclude": [
+    "src/lib/game/entities/Environment_backup.ts"
   ]
 }

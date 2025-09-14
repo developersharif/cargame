@@ -1,28 +1,298 @@
-export interface RoomData {
+import { database, isFirebaseAvailable } from '../config/firebase';
+import {
+  ref,
+  push,
+  set,
+  onValue,
+  off,
+  remove,
+  get,
+  update,
+  onDisconnect
+} from 'firebase/database';
+
+export interface Player {
   id: string;
-  host: string;
-  players: { id: string; name?: string }[];
-  settings: Record<string, unknown>;
-  status: 'waiting' | 'racing' | 'finished';
+  name: string;
+  status: 'ready' | 'not-ready' | 'loading' | 'racing' | 'finished';
+  isHost: boolean;
+  joinedAt: number;
+}
+
+export interface Room {
+  id: string;
+  hostId: string;
+  hostName: string;
+  players: Record<string, Player>;
+  status: 'waiting' | 'starting' | 'racing' | 'finished';
+  maxPlayers: number;
   createdAt: number;
+  updatedAt: number;
 }
 
-export default class RoomManager {
-  async createRoom(hostId: string): Promise<RoomData> {
-    // TODO: integrate Firebase
-    return {
-      id: crypto.randomUUID(),
-      host: hostId,
-      players: [{ id: hostId }],
-      settings: {},
-      status: 'waiting',
-      createdAt: Date.now()
-    };
+export class RoomManager {
+  private currentRoom: Room | null = null;
+  private playerId: string = '';
+  private playerName: string = '';
+  private roomUnsubscribe: (() => void) | null = null;
+  private onPlayerJoinCallback?: (player: Player) => void;
+  private onPlayerLeaveCallback?: (playerId: string) => void;
+  private onRoomErrorCallback?: (error: Error) => void;
+  private lastPlayerIds: Set<string> = new Set();
+
+  constructor() {
+    this.playerId = Math.random().toString(36).substring(2, 15);
+    console.log('RoomManager initialized with player ID:', this.playerId);
   }
 
-  async joinRoom(roomId: string, playerId: string): Promise<void> {
-    // TODO: integrate Firebase
-    void roomId;
-    void playerId;
+  setPlayerName(name: string): void {
+    this.playerName = name;
+  }
+
+  async createRoom(hostName: string): Promise<string> {
+    if (!isFirebaseAvailable() || !database) {
+      throw new Error('Firebase is not available');
+    }
+
+    try {
+      this.playerName = hostName;
+      
+      const roomData = {
+        hostId: this.playerId,
+        hostName: hostName,
+        players: {
+          [this.playerId]: {
+            id: this.playerId,
+            name: hostName,
+            status: 'not-ready' as const,
+            isHost: true,
+            joinedAt: Date.now()
+          }
+        },
+        status: 'waiting' as const,
+        maxPlayers: 4,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      const roomsRef = ref(database, 'rooms');
+      const newRoomRef = push(roomsRef);
+      
+      if (!newRoomRef.key) {
+        throw new Error('Failed to generate room ID');
+      }
+
+      const roomWithId = {
+        id: newRoomRef.key,
+        ...roomData
+      };
+
+      await set(newRoomRef, roomWithId);
+
+      // Ensure room is cleaned up if the host disconnects unexpectedly
+      try {
+        onDisconnect(newRoomRef).remove();
+      } catch (e) {
+        // onDisconnect may fail in some emulated/offline environments; ignore
+      }
+      
+      this.currentRoom = roomWithId;
+      
+      console.log('Room created successfully with ID:', newRoomRef.key);
+      return newRoomRef.key;
+
+    } catch (error) {
+      console.error('Failed to create room:', error);
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('permission')) {
+          throw new Error('Firebase permission denied. Please check database rules.');
+        } else if (error.message.includes('network')) {
+          throw new Error('Network error. Please check your internet connection.');
+        } else {
+          throw new Error(`Room creation failed: ${error.message}`);
+        }
+      }
+      
+      throw new Error('Unknown error occurred while creating room');
+    }
+  }
+
+  async joinRoom(roomId: string, playerName: string): Promise<void> {
+    if (!isFirebaseAvailable() || !database) {
+      throw new Error('Firebase is not available');
+    }
+
+    try {
+      this.playerName = playerName;
+      
+      const roomRef = ref(database, `rooms/${roomId}`);
+      const snapshot = await get(roomRef);
+      
+      if (!snapshot.exists()) {
+        throw new Error('Room not found');
+      }
+
+      const room = snapshot.val();
+      
+      if (room.status !== 'waiting') {
+        throw new Error('Room is not accepting new players');
+      }
+
+      const currentPlayerCount = Object.keys(room.players).length;
+      if (currentPlayerCount >= room.maxPlayers) {
+        throw new Error('Room is full');
+      }
+
+      const newPlayer: Player = {
+        id: this.playerId,
+        name: playerName,
+        status: 'not-ready',
+        isHost: false,
+        joinedAt: Date.now()
+      };
+
+      const playerPath = ref(database, `rooms/${roomId}/players/${this.playerId}`);
+      await set(playerPath, newPlayer);
+      await update(roomRef, { updatedAt: Date.now() });
+      this.currentRoom = { ...room, players: { ...room.players, [this.playerId]: newPlayer }, updatedAt: Date.now() };
+
+      // Auto-remove this player if connection drops
+      try {
+        onDisconnect(playerPath).remove();
+      } catch (e) {
+        // ignore if unavailable
+      }
+      
+      console.log('Successfully joined room:', roomId);
+
+    } catch (error) {
+      console.error('Failed to join room:', error);
+      throw error;
+    }
+  }
+
+  getCurrentRoom(): Room | null {
+    return this.currentRoom;
+  }
+
+  getPlayerId(): string {
+    return this.playerId;
+  }
+
+  getPlayerName(): string {
+    return this.playerName;
+  }
+
+  isHost(): boolean {
+    return this.currentRoom?.hostId === this.playerId;
+  }
+
+  async leaveRoom(): Promise<void> {
+    if (!this.currentRoom || !isFirebaseAvailable() || !database) {
+      return;
+    }
+
+    try {
+      // Unsubscribe listeners
+      if (this.roomUnsubscribe) {
+        this.roomUnsubscribe();
+        this.roomUnsubscribe = null;
+      }
+
+      const roomId = this.currentRoom.id;
+      const roomRef = ref(database, `rooms/${roomId}`);
+
+      if (this.currentRoom.hostId === this.playerId) {
+        // Host leaving: delete entire room
+        await remove(roomRef);
+      } else {
+        // Guest leaving: remove only the player entry
+        const playerRef = ref(database, `rooms/${roomId}/players/${this.playerId}`);
+        await remove(playerRef);
+
+        // Update room timestamp
+        await update(roomRef, { updatedAt: Date.now() });
+      }
+
+      this.currentRoom = null;
+      this.lastPlayerIds.clear();
+    } catch (error) {
+      console.error('Failed to leave room:', error);
+      throw error;
+    }
+  }
+
+  onRoomUpdate(callback: (room: Room | null) => void): void {
+    if (!this.currentRoom || !isFirebaseAvailable() || !database) return;
+
+    const roomRef = ref(database, `rooms/${this.currentRoom.id}`);
+
+    // Clean previous listener
+    if (this.roomUnsubscribe) {
+      this.roomUnsubscribe();
+      this.roomUnsubscribe = null;
+    }
+
+    const unsubscribe = onValue(
+      roomRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          this.currentRoom = null;
+          callback(null);
+          return;
+        }
+
+        const newRoom = snapshot.val() as Room;
+        const prevPlayers = new Set(this.lastPlayerIds);
+        const nextPlayers = new Set(Object.keys(newRoom.players || {}));
+
+        // Compute joins
+        for (const id of nextPlayers) {
+          if (!prevPlayers.has(id) && this.onPlayerJoinCallback) {
+            const p = newRoom.players[id];
+            if (p) this.onPlayerJoinCallback(p);
+          }
+        }
+        // Compute leaves
+        for (const id of prevPlayers) {
+          if (!nextPlayers.has(id) && this.onPlayerLeaveCallback) {
+            this.onPlayerLeaveCallback(id);
+          }
+        }
+
+        this.lastPlayerIds = nextPlayers;
+        this.currentRoom = newRoom;
+        callback(newRoom);
+      },
+      (error) => {
+        console.error('Room listener error:', error);
+        if (this.onRoomErrorCallback) this.onRoomErrorCallback(error as any);
+      }
+    );
+
+    this.roomUnsubscribe = unsubscribe;
+  }
+
+  onPlayerJoin(callback: (player: Player) => void): void {
+    this.onPlayerJoinCallback = callback;
+  }
+
+  onPlayerLeave(callback: (playerId: string) => void): void {
+    this.onPlayerLeaveCallback = callback;
+  }
+
+  onRoomError(callback: (error: Error) => void): void {
+    this.onRoomErrorCallback = callback;
+  }
+
+  async startGame(): Promise<void> {
+    if (!this.currentRoom || !isFirebaseAvailable() || !database) return;
+    const roomRef = ref(database, `rooms/${this.currentRoom.id}`);
+    await update(roomRef, { status: 'racing', updatedAt: Date.now() });
+    this.currentRoom = { ...this.currentRoom, status: 'racing', updatedAt: Date.now() };
   }
 }
+
+export default RoomManager;

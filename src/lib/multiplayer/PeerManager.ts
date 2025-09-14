@@ -1,52 +1,104 @@
-import Peer, { DataConnection } from 'peerjs';
+import { browser } from '$app/environment';
 
-export type Player = { id: string; name?: string };
-export type GameStatePacket = unknown; // replace with compressed state
+export interface PeerInfo {
+  id: string;
+  playerId: string;
+  latency: number;
+  status: 'connected' | 'disconnected';
+}
 
-export default class PeerManager {
-  private peer?: Peer;
-  private connections = new Map<string, DataConnection>();
-  private onJoin?: (player: Player) => void;
-  private onLeave?: (playerId: string) => void;
-  private onData?: (data: any) => void;
+export class PeerManager {
+  private peer: any = null;
+  private connections: Map<string, any> = new Map();
+  private isHost: boolean = false;
+  private onPlayerJoinCallback?: (player: any) => void;
+  private onPlayerLeaveCallback?: (playerId: string) => void;
+  private onDataReceivedCallback?: (data: any, senderId: string) => void;
 
-  constructor(private roomId: string) {}
-
-  async createRoom(): Promise<string> {
-    this.peer = new Peer();
-    this.peer.on('connection', (conn) => this.attachConnection(conn));
-    await new Promise<void>((resolve) => this.peer!.on('open', () => resolve()));
-    return this.peer!.id;
+  constructor() {
+    console.log('PeerManager created');
   }
 
-  async joinRoom(hostId: string): Promise<void> {
-    this.peer = new Peer();
-    await new Promise<void>((resolve) => this.peer!.on('open', () => resolve()));
-    const conn = this.peer.connect(hostId);
-    this.attachConnection(conn);
+  async initializeHost(): Promise<void> {
+    if (!browser) return;
+    
+    try {
+      const PeerJS = await import('peerjs');
+      this.peer = new PeerJS.default();
+      this.isHost = true;
+      
+      this.peer.on('open', (id: string) => {
+        console.log('Host peer initialized with ID:', id);
+      });
+
+      this.peer.on('connection', (conn: any) => {
+        this.handleNewConnection(conn);
+      });
+    } catch (error) {
+      console.error('Failed to initialize host:', error);
+    }
   }
 
-  broadcast(data: GameStatePacket) {
-    this.connections.forEach((c) => c.open && c.send(data));
+  async initializeGuest(): Promise<void> {
+    if (!browser) return;
+    
+    try {
+      const PeerJS = await import('peerjs');
+      this.peer = new PeerJS.default();
+      this.isHost = false;
+      
+      this.peer.on('open', (id: string) => {
+        console.log('Guest peer initialized with ID:', id);
+      });
+    } catch (error) {
+      console.error('Failed to initialize guest:', error);
+    }
   }
 
-  onPlayerJoin(cb: (player: Player) => void) { this.onJoin = cb; }
-  onPlayerLeave(cb: (id: string) => void) { this.onLeave = cb; }
-  onDataReceived(cb: (data: any) => void) { this.onData = cb; }
-
-  private attachConnection(conn: DataConnection) {
-    conn.on('open', () => {
-      this.connections.set(conn.peer, conn);
-      this.onJoin?.({ id: conn.peer });
+  private handleNewConnection(conn: any): void {
+    this.connections.set(conn.peer, conn);
+    
+    conn.on('data', (data: any) => {
+      if (this.onDataReceivedCallback) {
+        this.onDataReceivedCallback(data, conn.peer);
+      }
     });
-    conn.on('data', (d) => this.onData?.(d));
+
     conn.on('close', () => {
       this.connections.delete(conn.peer);
-      this.onLeave?.(conn.peer);
+      if (this.onPlayerLeaveCallback) {
+        this.onPlayerLeaveCallback(conn.peer);
+      }
     });
-    conn.on('error', () => {
-      this.connections.delete(conn.peer);
-      this.onLeave?.(conn.peer);
-    });
+
+    if (this.onPlayerJoinCallback) {
+      this.onPlayerJoinCallback({ id: conn.peer });
+    }
+  }
+
+  getConnectedPeers(): string[] {
+    return Array.from(this.connections.keys());
+  }
+
+  onPlayerJoin(callback: (player: any) => void): void {
+    this.onPlayerJoinCallback = callback;
+  }
+
+  onPlayerLeave(callback: (playerId: string) => void): void {
+    this.onPlayerLeaveCallback = callback;
+  }
+
+  onDataReceived(callback: (data: any, senderId: string) => void): void {
+    this.onDataReceivedCallback = callback;
+  }
+
+  disconnect(): void {
+    if (this.peer) {
+      this.peer.destroy();
+      this.peer = null;
+    }
+    this.connections.clear();
   }
 }
+
+export default PeerManager;

@@ -1,33 +1,102 @@
-export type GameState = { t: number; players: Record<string, { x: number; y: number; z: number }> };
+export interface GameState {
+  playerId: string;
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
+  velocity: { x: number; y: number; z: number };
+  speed: number;
+  timestamp: number;
+  lapCount: number;
+  lastCheckpoint: number;
+}
 
-export default class StateSync {
-  private localState: GameState = { t: 0, players: {} };
-  private remoteStates = new Map<string, GameState[]>(); // buffer per player
+export interface InterpolationBuffer {
+  states: Map<string, GameState[]>;
+  maxStates: number;
+}
 
-  syncLocalState(state: GameState) { this.localState = state; }
+export class StateSync {
+  private localState: GameState | null = null;
+  private remoteStates: Map<string, GameState> = new Map();
+  private interpolationBuffer: InterpolationBuffer = {
+    states: new Map(),
+    maxStates: 10
+  };
+  private onStateCallback?: (playerId: string, state: GameState) => void;
 
-  pushRemoteState(playerId: string, state: GameState) {
-    const buf = this.remoteStates.get(playerId) ?? [];
-    buf.push(state);
-    if (buf.length > 10) buf.shift();
-    this.remoteStates.set(playerId, buf);
+  constructor() {
+    console.log('StateSync initialized');
   }
 
-  getInterpolatedState(playerId: string, atTime: number): GameState | undefined {
-    const buf = this.remoteStates.get(playerId);
-    if (!buf || buf.length < 2) return buf?.[0];
-    const a = buf[buf.length - 2];
-    const b = buf[buf.length - 1];
-    const t = (atTime - a.t) / Math.max(1, b.t - a.t);
-    const lerp = (v1: number, v2: number) => v1 + (v2 - v1) * Math.min(Math.max(t, 0), 1);
-    const pa = a.players[playerId];
-    const pb = b.players[playerId];
-    if (!pa || !pb) return undefined;
-    return {
-      t: atTime,
-      players: {
-        [playerId]: { x: lerp(pa.x, pb.x), y: lerp(pa.y, pb.y), z: lerp(pa.z, pb.z) }
+  setLocalState(state: GameState): void {
+    this.localState = state;
+  }
+
+  getLocalState(): GameState | null {
+    return this.localState;
+  }
+
+  updateRemoteState(playerId: string, state: GameState): void {
+    this.remoteStates.set(playerId, state);
+    
+    // Add to interpolation buffer
+    if (!this.interpolationBuffer.states.has(playerId)) {
+      this.interpolationBuffer.states.set(playerId, []);
+    }
+    
+    const playerStates = this.interpolationBuffer.states.get(playerId)!;
+    playerStates.push(state);
+    
+    // Keep only the most recent states
+    if (playerStates.length > this.interpolationBuffer.maxStates) {
+      playerStates.shift();
+    }
+
+    // Notify callback
+    if (this.onStateCallback) {
+      this.onStateCallback(playerId, state);
+    }
+  }
+
+  getInterpolatedState(playerId: string): GameState | null {
+    const playerStates = this.interpolationBuffer.states.get(playerId);
+    if (!playerStates || playerStates.length === 0) {
+      return this.remoteStates.get(playerId) || null;
+    }
+
+    // Simple interpolation - just return the latest state for now
+    return playerStates[playerStates.length - 1];
+  }
+
+  getAllRemoteStates(): Map<string, GameState> {
+    return this.remoteStates;
+  }
+
+  reconcileStates(): void {
+    // Basic reconciliation - remove old states
+    const now = Date.now();
+    const maxAge = 5000; // 5 seconds
+
+    for (const [playerId, state] of this.remoteStates.entries()) {
+      if (now - state.timestamp > maxAge) {
+        this.remoteStates.delete(playerId);
+        this.interpolationBuffer.states.delete(playerId);
       }
-    };
+    }
+  }
+
+  onStateUpdate(callback: (playerId: string, state: GameState) => void): void {
+    this.onStateCallback = callback;
+  }
+
+  clearRemoteStates(): void {
+    this.remoteStates.clear();
+    this.interpolationBuffer.states.clear();
+  }
+
+  removePlayer(playerId: string): void {
+    this.remoteStates.delete(playerId);
+    this.interpolationBuffer.states.delete(playerId);
   }
 }
+
+export default StateSync;
