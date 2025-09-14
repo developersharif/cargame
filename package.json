@@ -7,6 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview --port 4173",
+    "ws-server": "node server/ws-server.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "lint": "eslint .",
     "test": "vitest run",
@@ -35,6 +36,7 @@
     "vitest": "^2.0.5",
     "svelte-eslint-parser": "^0.41.0",
     "gh-pages": "^6.1.1",
+    "ws": "^8.18.0",
     "@opentelemetry/api": "^1.9.0"
   }
 }
