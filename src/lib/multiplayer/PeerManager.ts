@@ -14,6 +14,7 @@ export class PeerManager {
   private onPlayerJoinCallback?: (player: any) => void;
   private onPlayerLeaveCallback?: (playerId: string) => void;
   private onDataReceivedCallback?: (data: any, senderId: string) => void;
+  private onOpenCallback?: (peerId: string) => void;
 
   constructor() {
     console.log('PeerManager created');
@@ -29,6 +30,7 @@ export class PeerManager {
       
       this.peer.on('open', (id: string) => {
         console.log('Host peer initialized with ID:', id);
+        this.onOpenCallback?.(id);
       });
 
       this.peer.on('connection', (conn: any) => {
@@ -49,6 +51,7 @@ export class PeerManager {
       
       this.peer.on('open', (id: string) => {
         console.log('Guest peer initialized with ID:', id);
+        this.onOpenCallback?.(id);
       });
     } catch (error) {
       console.error('Failed to initialize guest:', error);
@@ -80,6 +83,25 @@ export class PeerManager {
     return Array.from(this.connections.keys());
   }
 
+  getPeerId(): string | null {
+    return this.peer?.id || null;
+  }
+
+  getIsHost(): boolean { return this.isHost; }
+
+  connectToHost(hostPeerId: string): void {
+    if (!this.peer || !hostPeerId) return;
+    if (this.connections.has(hostPeerId)) return;
+    const conn = this.peer.connect(hostPeerId, { reliable: true });
+    this.handleNewConnection(conn);
+  }
+
+  broadcast(data: any): void {
+    for (const conn of this.connections.values()) {
+      try { conn.open && conn.send(data); } catch {}
+    }
+  }
+
   onPlayerJoin(callback: (player: any) => void): void {
     this.onPlayerJoinCallback = callback;
   }
@@ -90,6 +112,10 @@ export class PeerManager {
 
   onDataReceived(callback: (data: any, senderId: string) => void): void {
     this.onDataReceivedCallback = callback;
+  }
+
+  onOpen(callback: (peerId: string) => void): void {
+    this.onOpenCallback = callback;
   }
 
   disconnect(): void {

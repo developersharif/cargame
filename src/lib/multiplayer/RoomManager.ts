@@ -8,7 +8,8 @@ import {
   remove,
   get,
   update,
-  onDisconnect
+  onDisconnect,
+  serverTimestamp
 } from 'firebase/database';
 
 export interface Player {
@@ -23,11 +24,13 @@ export interface Room {
   id: string;
   hostId: string;
   hostName: string;
+  hostPeerId?: string;
   players: Record<string, Player>;
   status: 'waiting' | 'starting' | 'racing' | 'finished';
   maxPlayers: number;
   createdAt: number;
   updatedAt: number;
+  raceStartAt?: number;
 }
 
 export class RoomManager {
@@ -41,7 +44,18 @@ export class RoomManager {
   private lastPlayerIds: Set<string> = new Set();
 
   constructor() {
-    this.playerId = Math.random().toString(36).substring(2, 15);
+    // Persist a stable playerId across navigations
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('playerId');
+      if (saved) {
+        this.playerId = saved;
+      } else {
+        this.playerId = Math.random().toString(36).substring(2, 15);
+        try { localStorage.setItem('playerId', this.playerId); } catch {}
+      }
+    } else {
+      this.playerId = Math.random().toString(36).substring(2, 15);
+    }
     console.log('RoomManager initialized with player ID:', this.playerId);
   }
 
@@ -89,12 +103,9 @@ export class RoomManager {
 
       await set(newRoomRef, roomWithId);
 
-      // Ensure room is cleaned up if the host disconnects unexpectedly
-      try {
-        onDisconnect(newRoomRef).remove();
-      } catch (e) {
-        // onDisconnect may fail in some emulated/offline environments; ignore
-      }
+      // Do NOT attach onDisconnect to remove entire room for host.
+      // This can race with route changes/navigation and cause the room to vanish.
+      // We rely on explicit leaveRoom() to remove the room when host leaves.
       
       this.currentRoom = roomWithId;
       
@@ -153,9 +164,9 @@ export class RoomManager {
         joinedAt: Date.now()
       };
 
-      const playerPath = ref(database, `rooms/${roomId}/players/${this.playerId}`);
-      await set(playerPath, newPlayer);
-      await update(roomRef, { updatedAt: Date.now() });
+  const playerPath = ref(database, `rooms/${roomId}/players/${this.playerId}`);
+  await set(playerPath, newPlayer);
+  await update(roomRef, { updatedAt: Date.now() });
       this.currentRoom = { ...room, players: { ...room.players, [this.playerId]: newPlayer }, updatedAt: Date.now() };
 
       // Auto-remove this player if connection drops
@@ -175,6 +186,19 @@ export class RoomManager {
 
   getCurrentRoom(): Room | null {
     return this.currentRoom;
+  }
+
+  async fetchRoom(roomId: string): Promise<Room | null> {
+    if (!isFirebaseAvailable() || !database) return null;
+    try {
+      const roomRef = ref(database, `rooms/${roomId}`);
+      const snap = await get(roomRef);
+      if (!snap.exists()) return null;
+      return snap.val() as Room;
+    } catch (e) {
+      console.error('fetchRoom error', e);
+      return null;
+    }
   }
 
   getPlayerId(): string {
@@ -290,8 +314,37 @@ export class RoomManager {
   async startGame(): Promise<void> {
     if (!this.currentRoom || !isFirebaseAvailable() || !database) return;
     const roomRef = ref(database, `rooms/${this.currentRoom.id}`);
-    await update(roomRef, { status: 'racing', updatedAt: Date.now() });
+    await update(roomRef, { status: 'racing', updatedAt: Date.now(), raceStartAt: serverTimestamp() as any });
     this.currentRoom = { ...this.currentRoom, status: 'racing', updatedAt: Date.now() };
+  }
+
+  async setHostPeerId(peerId: string): Promise<void> {
+    if (!this.currentRoom || !isFirebaseAvailable() || !database) return;
+    const roomRef = ref(database, `rooms/${this.currentRoom.id}`);
+    await update(roomRef, { hostPeerId: peerId, updatedAt: Date.now() });
+    this.currentRoom = { ...this.currentRoom, hostPeerId: peerId, updatedAt: Date.now() } as any;
+  }
+
+  // Lightweight subscription that doesn't depend on joinRoom/currentRoom
+  subscribeToRoom(
+    roomId: string,
+    callback: (room: Room | null) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    if (!isFirebaseAvailable() || !database) return () => {};
+    const roomRef = ref(database, `rooms/${roomId}`);
+    const unsub = onValue(
+      roomRef,
+      (snap) => {
+        if (!snap.exists()) { callback(null); return; }
+        callback(snap.val() as Room);
+      },
+      (err) => {
+        console.error('subscribeToRoom error:', err);
+        onError?.(err as any);
+      }
+    );
+    return unsub;
   }
 }
 

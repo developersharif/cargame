@@ -20,6 +20,7 @@
   let connectedPeers: string[] = [];
   let copied = false;
   let copiedLink = false;
+  let navigatingToGame = false;
 
   onMount(async () => {
     playerName = localStorage.getItem('playerName') || 'Anonymous';
@@ -50,7 +51,8 @@
     if (peerManager) {
       peerManager.disconnect();
     }
-    if (roomManager) {
+    // Don't tear down the room when we're transitioning into the game
+    if (roomManager && !navigatingToGame) {
       roomManager.leaveRoom();
     }
   });
@@ -64,6 +66,10 @@
       // Set up peer manager for hosting
       peerManager = new PeerManager();
       await peerManager.initializeHost();
+      const hostPeerId = peerManager.getPeerId();
+      if (hostPeerId) {
+        await roomManager.setHostPeerId(hostPeerId);
+      }
 
       console.log('Room created:', createdRoomId);
 
@@ -149,9 +155,17 @@
 
     roomManager.onRoomUpdate((room) => {
       roomData = room;
+      // Guests: if host peer id is present, connect to host
+      if (room && !isHost && room.hostPeerId) {
+        try {
+          peerManager?.connectToHost(room.hostPeerId);
+        } catch {}
+      }
       // If the host starts the game, navigate guests automatically
-      if (room && room.status === 'racing' && !isHost) {
-        goto('/game');
+      if (room && room.status === 'racing') {
+        // Prevent leaveRoom on destroy when transitioning to game
+        navigatingToGame = true;
+        goto(`/game/multiplayer/${room?.id}`);
       }
     });
   }
@@ -179,9 +193,12 @@
 
   async function startGame() {
     if (isHost && roomData) {
-      // Update room status so guests get signaled via realtime listener
+      // Mark navigation intent first to avoid leaveRoom during reactive listener navigation
+      navigatingToGame = true;
+      // Update room status so guests (and host) get signaled via realtime listener
       await roomManager.startGame();
-      goto('/game');
+      // Direct navigate as well (host), in case listener latency occurs
+      goto(`/game/multiplayer/${roomData.id}`);
     }
   }
 
