@@ -1,7 +1,8 @@
 import adapter from '@sveltejs/adapter-static';
 
 const dev = process.env.NODE_ENV === 'development';
-const repoName = process.env.GITHUB_REPOSITORY?.split('/')?.[1] ?? 'multiplayer-race-game';
+// Allow overriding via BASE_PATH; default to GitHub Pages repo path
+const basePath = dev ? '' : (process.env.BASE_PATH || '/cargame');
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -12,7 +13,7 @@ const config = {
       fallback: 'index.html'
     }),
     paths: {
-      base: dev ? '' : `/${repoName}`
+      base: basePath
     }
   }
 };

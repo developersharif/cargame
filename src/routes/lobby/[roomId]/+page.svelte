@@ -4,12 +4,11 @@
   import { onMount, onDestroy } from 'svelte';
   import { isFirebaseAvailable } from '$lib/config/firebase.js';
   import RoomManager, { type Room, type Player } from '$lib/multiplayer/RoomManager.js';
-  import PeerManager from '$lib/multiplayer/PeerManager.js';
 
   $: roomId = $page.params.roomId;
 
   let roomManager: RoomManager;
-  let peerManager: PeerManager;
+  let peerManager: any;
   let roomData: Room | null = null;
   let isHost = false;
   // derive reactively so navigating to /lobby/create works reliably
@@ -48,9 +47,7 @@
   });
 
   onDestroy(() => {
-    if (peerManager) {
-      peerManager.disconnect();
-    }
+    // Legacy PeerJS cleanup (no-op in WebSocket flow)
     // Don't tear down the room when we're transitioning into the game
     if (roomManager && !navigatingToGame) {
       roomManager.leaveRoom();
@@ -63,18 +60,7 @@
       roomData = roomManager.getCurrentRoom();
       isHost = true;
 
-      // Set up peer manager for hosting
-      peerManager = new PeerManager();
-      await peerManager.initializeHost();
-      const hostPeerId = peerManager.getPeerId();
-      if (hostPeerId) {
-        await roomManager.setHostPeerId(hostPeerId);
-      }
-
       console.log('Room created:', createdRoomId);
-
-      // Set up peer event listeners
-      setupPeerListeners();
 
       // Subscribe to realtime room changes
       setupRoomListeners();
@@ -101,14 +87,7 @@
         throw new Error('Room not found or no longer available');
       }
 
-      // Set up peer manager for joining
-      peerManager = new PeerManager();
-      await peerManager.initializeGuest();
-
       console.log('Joined room:', roomData.id);
-
-      // Set up peer event listeners
-      setupPeerListeners();
 
       // Subscribe to realtime room changes
       setupRoomListeners();
@@ -119,24 +98,7 @@
     }
   }
 
-  function setupPeerListeners() {
-    if (!peerManager) return;
-
-    peerManager.onPlayerJoin((player) => {
-      console.log('Player joined:', player);
-      connectedPeers = peerManager.getConnectedPeers();
-    });
-
-    peerManager.onPlayerLeave((playerId) => {
-      console.log('Player left:', playerId);
-      connectedPeers = peerManager.getConnectedPeers();
-    });
-
-    peerManager.onDataReceived((data, senderId) => {
-      console.log('Received data from', senderId, ':', data);
-      // Handle game data here
-    });
-  }
+  function setupPeerListeners() { /* deprecated */ }
 
   function setupRoomListeners() {
     if (!roomManager) return;
@@ -155,12 +117,7 @@
 
     roomManager.onRoomUpdate((room) => {
       roomData = room;
-      // Guests: if host peer id is present, connect to host
-      if (room && !isHost && room.hostPeerId) {
-        try {
-          peerManager?.connectToHost(room.hostPeerId);
-        } catch {}
-      }
+      // (PeerJS deprecated) No-op in WebSocket mode
       // If the host starts the game, navigate guests automatically
       if (room && room.status === 'racing') {
         // Prevent leaveRoom on destroy when transitioning to game

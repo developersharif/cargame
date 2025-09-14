@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "postbuild": "cp build/index.html build/404.html",
     "preview": "vite preview --port 4173",
     "ws-server": "node server/ws-server.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "lint": "eslint .",
     "test": "vitest run",
-    "deploy": "npm run build && gh-pages -d build",
+    "deploy": "gh-pages -d build",
     "predeploy": "npm run build"
   },
   "dependencies": {
