@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Builds
+build/
+.svelte-kit/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Env
+.env
+.env.*
