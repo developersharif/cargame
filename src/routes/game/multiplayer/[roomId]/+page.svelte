@@ -4,6 +4,7 @@
   import MultiplayerEngine, { type MPPlayerInfo } from '$lib/game/core/MultiplayerEngine';
   import RoomManager from '$lib/multiplayer/RoomManager';
   import WebSocketClient from '$lib/multiplayer/WebSocketClient';
+  import { base } from '$app/paths';
 
   let container: HTMLDivElement | null = null;
   let engine: MultiplayerEngine | null = null;

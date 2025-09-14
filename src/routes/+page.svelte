@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { isFirebaseAvailable } from '$lib/config/firebase.js';
 
@@ -19,25 +20,25 @@
     if (playerName.trim()) {
       localStorage.setItem('playerName', playerName.trim());
     }
-    goto('/game');
+    goto(`${base}/game`);
   }
 
   function createRoom() {
     if (playerName.trim()) {
       localStorage.setItem('playerName', playerName.trim());
-      goto('/lobby/create');
+      goto(`${base}/lobby/create`);
     }
   }
 
   function joinRoom() {
     if (roomId.trim() && playerName.trim()) {
       localStorage.setItem('playerName', playerName.trim());
-      goto(`/lobby/${roomId.trim()}`);
+      goto(`${base}/lobby/${roomId.trim()}`);
     }
   }
 
   function openSettings() {
-    goto('/settings');
+    goto(`${base}/settings`);
   }
 
   function toggleJoinRoom() {

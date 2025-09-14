@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import { onMount, onDestroy } from 'svelte';
   import { isFirebaseAvailable } from '$lib/config/firebase.js';
   import RoomManager, { type Room, type Player } from '$lib/multiplayer/RoomManager.js';
@@ -66,7 +67,7 @@
       setupRoomListeners();
 
       // Update URL to actual room ID
-      goto(`/lobby/${createdRoomId}`, { replaceState: true });
+      goto(`${base}/lobby/${createdRoomId}`, { replaceState: true });
     } catch (error) {
       throw new Error(
         'Failed to create room: ' + (error instanceof Error ? error.message : 'Unknown error')
@@ -98,7 +99,9 @@
     }
   }
 
-  function setupPeerListeners() { /* deprecated */ }
+  function setupPeerListeners() {
+    /* deprecated */
+  }
 
   function setupRoomListeners() {
     if (!roomManager) return;
@@ -122,7 +125,7 @@
       if (room && room.status === 'racing') {
         // Prevent leaveRoom on destroy when transitioning to game
         navigatingToGame = true;
-        goto(`/game/multiplayer/${room?.id}`);
+        goto(`${base}/game/multiplayer/${room?.id}`);
       }
     });
   }
@@ -155,7 +158,7 @@
       // Update room status so guests (and host) get signaled via realtime listener
       await roomManager.startGame();
       // Direct navigate as well (host), in case listener latency occurs
-      goto(`/game/multiplayer/${roomData.id}`);
+      goto(`${base}/game/multiplayer/${roomData.id}`);
     }
   }
 
@@ -163,7 +166,7 @@
     if (roomManager) {
       roomManager.leaveRoom();
     }
-    goto('/');
+    goto(`${base}/`);
   }
 
   // Require at least one peer (host + 1 player = 2 total) to start
@@ -182,7 +185,7 @@
       <div class="error-icon">❌</div>
       <h2>Connection Failed</h2>
       <p>{errorMessage}</p>
-      <button class="btn-primary" on:click={() => goto('/')}> Back to Menu </button>
+      <button class="btn-primary" on:click={() => goto(`${base}/`)}> Back to Menu </button>
     </div>
   {:else if isConnecting}
     <div class="loading-screen">
