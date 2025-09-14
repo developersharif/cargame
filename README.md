@@ -1,11 +1,11 @@
 # 3D Multiplayer Car Racing (SvelteKit + Three.js)
 
-A scalable, multiplayer 3D car racing game built with SvelteKit, Three.js, WebRTC (PeerJS), and Firebase.
+A scalable, multiplayer 3D car racing game built with SvelteKit, Three.js, Firebase (rooms), and a WebSocket relay for realtime gameplay.
 
 ## Features
 
 - **🏎️ 3D Racing**: Three.js-powered 3D car physics and rendering
-- **🌐 Multiplayer**: Real-time P2P multiplayer using PeerJS and Firebase
+- **🌐 Multiplayer**: Real-time gameplay via a WebSocket relay (Firebase for rooms)
 - **🎮 Game Modes**: Sunny, Cloudy, and Horror environments
 - **📱 Responsive**: Works on desktop and mobile devices
 - **🚀 Fast Deployment**: GitHub Pages ready with automated CI/CD
@@ -52,7 +52,7 @@ The game uses Firebase Realtime Database for room management and PeerJS for P2P 
 
 ### Environment Variables
 
-Create a `.env` file (copy from `.env.example`) with your Firebase configuration:
+Create a `.env` file (copy from `.env.example`) with your Firebase configuration and WebSocket relay URL:
 
 ```bash
 VITE_FIREBASE_API_KEY=your_api_key_here
@@ -62,7 +62,22 @@ VITE_FIREBASE_PROJECT_ID=your-project-id
 VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
 VITE_FIREBASE_APP_ID=1:123456789:web:abcdef123456
+
+# Local WebSocket relay (dev)
+VITE_WS_URL=ws://localhost:8787
+
+# Production WebSocket relay
+# VITE_WS_URL=wss://your-relay-domain.example.com
 ```
+
+### WebSocket Relay
+
+- Local: run the relay that ships in this repo
+  - Start: `npm run ws-server`
+  - Uses ws://localhost:8787 by default
+- Production: deploy `server/ws-server.js` to your infra (Fly.io, Render, Railway, etc.) or behind NGINX/Cloudflare
+  - Use TLS (wss://) in production and set `VITE_WS_URL` accordingly
+  - Add simple health checks and scaling (stateless room maps per instance)
 
 ### Single Player Mode
 
