@@ -42,6 +42,10 @@ export default class MultiplayerEngine {
   private finishZ = 600; // simple finish line z position
   private winnerId: string | null = null;
   private frozen = false;
+  private finishLine?: THREE.Mesh;
+  private finishLineMat?: THREE.MeshBasicMaterial;
+  private throttleInput = 0;
+  private muted = false;
 
   public currentSpeed = 0; // for local HUD
 
@@ -95,6 +99,9 @@ export default class MultiplayerEngine {
   // Collisions against static obstacles
   this.collision = new CollisionSystem(this.track.obstacles);
 
+    // Finish line visual
+    this.createOrUpdateFinishLine();
+
     // Create cars for all players
     const ids = Array.from(this.players.keys());
     ids.forEach((id) => {
@@ -129,6 +136,21 @@ export default class MultiplayerEngine {
     this.applySettingsToAudio();
     const unsub = settings.subscribe(() => this.applySettingsToAudio());
     this.disposeBag.push(() => unsub());
+
+    // Try to resume audio on first user gesture
+    const resumeOnce = async () => {
+      await this.audio?.resume();
+      window.removeEventListener('keydown', resumeOnce, true);
+      window.removeEventListener('pointerdown', resumeOnce, true);
+      this.disposeBag = this.disposeBag.filter((fn) => fn !== removeResumeOnce);
+    };
+    const removeResumeOnce = () => {
+      window.removeEventListener('keydown', resumeOnce, true);
+      window.removeEventListener('pointerdown', resumeOnce, true);
+    };
+    window.addEventListener('keydown', resumeOnce, true);
+    window.addEventListener('pointerdown', resumeOnce, true);
+    this.disposeBag.push(removeResumeOnce);
 
     // Follow local player's car
     const localCar = this.players.get(this.localId)!.car;
@@ -181,18 +203,42 @@ export default class MultiplayerEngine {
       const steerRight = Number(this.input.isDown('ArrowRight') || this.input.isDown('KeyD'));
       const steering = THREE.MathUtils.clamp(steerLeft - steerRight, -1, 1);
       local.car.setInputs({ throttle, brake, steering, handbrake, boost });
+      this.throttleInput = throttle;
     } else {
       local.car.setInputs({ throttle: 0, brake: 1, steering: 0, handbrake: true, boost: false });
+      this.throttleInput = 0;
     }
 
-    // Update all cars; follow local
+  // Update all cars; follow local
     this.players.forEach(({ car }) => car.update(deltaTime));
     this.currentSpeed = local.car.getSpeed();
     this.chaseCamera.update(deltaTime, local.car.group);
 
+  // Resolve simple car-to-car collisions (local against others only) to prevent overlap
+  this.resolveLocalCarCollisions();
+
+  // Audio: engine for local player
+  this.audio?.setEngine(this.throttleInput, this.currentSpeed, local.car.config.maxSpeed);
+
     // Update track/environment with the local car progression
     this.track.update(local.car.group.position.z);
     this.environment?.update(local.car.group.position.z);
+
+    // Show finish line when approaching
+    if (this.finishLine && this.finishLineMat) {
+      const d = this.finishZ - local.car.group.position.z;
+      if (d <= 0) {
+        this.finishLineMat.opacity = 1.0;
+        this.finishLine.visible = true;
+      } else if (d < 140) {
+        const t = 1 - d / 140; // fade in over last 140m
+        this.finishLineMat.opacity = THREE.MathUtils.clamp(0.15 + 0.85 * t, 0.15, 1);
+        this.finishLine.visible = true;
+      } else {
+        this.finishLineMat.opacity = 0.12;
+        this.finishLine.visible = false; // keep scene clean when far away
+      }
+    }
 
     const camPos = this.camera.position;
     this.players.forEach(({ car, label }) => {
@@ -243,6 +289,46 @@ export default class MultiplayerEngine {
     this.renderSystem.render();
   }
 
+  private resolveLocalCarCollisions() {
+    const local = this.players.get(this.localId);
+    if (!local) return;
+    const lp = local.car.group.position;
+    const lv = local.car.getVelocityRef();
+    const radius = 0.7; // approx car half-width for circle proxy
+    const minDist = radius * 2;
+    const minDistSq = minDist * minDist;
+    const tmp = new THREE.Vector3();
+    let totalImpact = 0;
+    this.players.forEach((other, id) => {
+      if (id === this.localId) return;
+      const op = other.car.group.position;
+      tmp.copy(op).sub(lp);
+      // Only consider XZ plane distance
+      const dx = tmp.x;
+      const dz = tmp.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq > 0 && distSq < minDistSq) {
+        const dist = Math.sqrt(distSq) || 1e-6;
+        const n = new THREE.Vector3(dx / dist, 0, dz / dist); // from local -> other
+        const penetration = minDist - dist;
+        // Push local away along -n
+        lp.addScaledVector(n, -penetration);
+        // Remove/reflect velocity component along the collision normal
+        const vn = lv.dot(n);
+        if (vn > 0) {
+          // moving towards other; reflect and dampen
+          const restitution = 0.2; // quite soft to keep calm
+          lv.addScaledVector(n, -(1 + restitution) * vn);
+          totalImpact += Math.abs(vn);
+        }
+      }
+    });
+    if (totalImpact > 0) {
+      const impactNorm = THREE.MathUtils.clamp(totalImpact * 0.15, 0, 1);
+      this.audio?.playCollision(impactNorm);
+    }
+  }
+
   private updateSize = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -260,6 +346,7 @@ export default class MultiplayerEngine {
     this.environment?.dispose(this.scene);
     this.renderer.dispose();
     this.input.destroy();
+    this.audio?.destroy();
     if (this.renderer.domElement.parentElement === this.container) {
       this.container.removeChild(this.renderer.domElement);
     }
@@ -270,6 +357,7 @@ export default class MultiplayerEngine {
   public getWinnerId() { return this.winnerId; }
   public freeze() { this.frozen = true; }
   public unfreeze() { this.frozen = false; }
+  public setMuted(m: boolean) { this.muted = m; this.applySettingsToAudio(); }
 
   public resetForReplay(startAtEpochMs?: number) {
     // Reset cars to grid, countdown and winner
@@ -281,6 +369,12 @@ export default class MultiplayerEngine {
       p.car.reset(new THREE.Vector3(0, 0, 0), 0);
     });
     this.relineUpGrid();
+    // Reset finish line visibility/opacity
+    if (this.finishLine && this.finishLineMat) {
+      this.finishLine.position.set(0, 0.01, this.finishZ);
+      this.finishLine.visible = false;
+      this.finishLineMat.opacity = 0.12;
+    }
     // Restart countdown
     this.countdownStartAt = startAtEpochMs || Date.now();
     this.countdown = 3;
@@ -335,7 +429,9 @@ export default class MultiplayerEngine {
     const entry = this.players.get(id);
     if (!entry) return;
     // Remove from scene
-    try { this.scene.remove(entry.car.group); } catch {}
+    try { this.scene.remove(entry.car.group); } catch {
+      // ignore
+    }
     this.players.delete(id);
     if (!this.raceStarted) this.relineUpGrid();
   }
@@ -349,18 +445,20 @@ export default class MultiplayerEngine {
   }
 
   private relineUpGrid() {
-    // Arrange cars in a grid near start line (z decreasing by rows)
+    // Arrange cars in a side-by-side grid near the start line with safe spacing
     const ids = Array.from(this.players.keys());
-    const cols = Math.min(3, Math.max(2, ids.length));
-    const colSpacing = 2.5;
-    const rowSpacing = 4;
-    const startZ = 0;
+    const maxCols = 4; // up to 4 cars per row
+    const cols = Math.min(maxCols, Math.max(2, Math.ceil(Math.sqrt(ids.length))));
+    const colSpacing = 2.8; // > car width to avoid overlap
+    const rowSpacing = 5.4; // extra space to reduce rear-end bumps at start
+    const startZ = -8; // start slightly behind origin for runway
     ids.forEach((id, index) => {
       const row = Math.floor(index / cols);
       const col = index % cols;
       const totalWidth = (cols - 1) * colSpacing;
       const x = -totalWidth / 2 + col * colSpacing;
-      const z = startZ - row * rowSpacing;
+      // slight stagger per row to increase visibility and space
+      const z = startZ - row * rowSpacing - (row % 2 ? 0.6 : 0);
       const p = this.players.get(id)!;
       p.car.setPosition(x, 0, z);
       p.car.setHeading(0);
@@ -369,7 +467,20 @@ export default class MultiplayerEngine {
 
   private applySettingsToAudio() {
     const s = get(settings);
-    this.audio?.updateFromSettings(s as any);
+    if (!this.audio) return;
+    if (this.muted) {
+      this.audio.updateFromSettings({
+        audio: {
+          master: 0,
+          engine: s.audio.engine,
+          effects: s.audio.effects,
+          music: s.audio.music,
+          spatial: s.audio.spatial
+        }
+      } as any);
+    } else {
+      this.audio.updateFromSettings(s as any);
+    }
   }
 
   private createNameLabel(text: string): THREE.Sprite {
@@ -379,7 +490,7 @@ export default class MultiplayerEngine {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const padX = 18;
-    const padY = 10;
+  // const padY = 10; // reserved for vertical padding if we tighten layout
     const bubbleW = canvas.width - padX * 2;
     const bubbleH = 56; // bubble body height
     const tailH = 12;   // tail height
@@ -452,5 +563,51 @@ export default class MultiplayerEngine {
     sprite.scale.set(baseW, baseH, 1);
     (sprite as any).userData = { ...(sprite as any).userData, baseScale: { w: baseW, h: baseH } };
     return sprite;
+  }
+
+  private createOrUpdateFinishLine() {
+    // Create a simple checkered finish line painted on the ground
+    const width = 50; // spans track width (~boundsX*2)
+    const depth = 1.2; // stripe thickness
+    if (!this.finishLineMat) {
+      const tex = this.makeCheckerTexture(12, 2); // columns, rows
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.needsUpdate = true;
+      this.finishLineMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        opacity: 0.12,
+        depthWrite: false
+      });
+    }
+    const geo = new THREE.PlaneGeometry(width, depth);
+    const mesh = new THREE.Mesh(geo, this.finishLineMat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(0, 0.01, this.finishZ);
+    mesh.visible = false; // shown when near
+    if (this.finishLine) {
+      try { this.scene.remove(this.finishLine); } catch {
+        // ignore
+      }
+    }
+    this.finishLine = mesh;
+    this.scene.add(mesh);
+  }
+
+  private makeCheckerTexture(cols = 8, rows = 2): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    const cw = canvas.width / cols;
+    const ch = canvas.height / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const black = (r + c) % 2 === 0;
+        ctx.fillStyle = black ? '#111' : '#eee';
+        ctx.fillRect(c * cw, r * ch, cw, ch);
+      }
+    }
+    return new THREE.CanvasTexture(canvas);
   }
 }

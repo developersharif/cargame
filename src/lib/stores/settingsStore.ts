@@ -41,7 +41,7 @@ const defaultSettings: GameSettings = {
     antialiasing: true,
     resolution: 1
   },
-  audio: { master: 0.8, effects: 0.8, music: 0.5, engine: 0.8, spatial: true },
+  audio: { master: 0.7, effects: 0.65, music: 0.45, engine: 0.65, spatial: true },
   controls: { sensitivity: 1 },
   gameplay: {
     difficulty: 'normal',

@@ -117,7 +117,19 @@
 
   <!-- Join Room Modal -->
   {#if showJoinRoom}
-    <div class="modal-overlay" on:click={() => (showJoinRoom = false)}>
+    <div
+      class="modal-overlay"
+      role="button"
+      tabindex="0"
+      aria-label="Close join room modal"
+      on:click={() => (showJoinRoom = false)}
+      on:keydown={(e) => {
+        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          showJoinRoom = false;
+        }
+      }}
+    >
       <div class="modal" on:click|stopPropagation>
         <h3>Join Room</h3>
         <p>Enter the room ID shared by your friend</p>
@@ -144,7 +156,19 @@
 
   <!-- Create Room Modal -->
   {#if showCreateRoom}
-    <div class="modal-overlay" on:click={() => (showCreateRoom = false)}>
+    <div
+      class="modal-overlay"
+      role="button"
+      tabindex="0"
+      aria-label="Close create room modal"
+      on:click={() => (showCreateRoom = false)}
+      on:keydown={(e) => {
+        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          showCreateRoom = false;
+        }
+      }}
+    >
       <div class="modal" on:click|stopPropagation>
         <h3>Create Room</h3>
         <p>Start a new multiplayer race and invite friends</p>

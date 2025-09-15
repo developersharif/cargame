@@ -14,6 +14,7 @@
   let winnerName: string | null = null;
   let leaderboard: Array<{ id: string; name: string; z: number; rank: number }> = [];
   let canRestart = false;
+  let muted = false;
 
   let rm: RoomManager;
   let ws: WebSocketClient | null = null;
@@ -163,6 +164,16 @@
     </div>
   {/if}
   <div class="speed">{speed} km/h</div>
+  <div class="audio-controls" style="pointer-events:auto">
+    <button
+      class="mute-btn"
+      aria-pressed={muted}
+      on:click={() => {
+        muted = !muted;
+        engine?.setMuted(muted);
+      }}>{muted ? 'Unmute' : 'Mute'}</button
+    >
+  </div>
   <div class="leaderboard">
     <div class="lb-title">Participants</div>
     {#each leaderboard as p}
@@ -278,5 +289,24 @@
   }
   .restart-btn:hover {
     background: #fb8c00;
+  }
+
+  .audio-controls {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .mute-btn {
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .mute-btn[aria-pressed='true'] {
+    background: rgba(255, 0, 0, 0.55);
   }
 </style>

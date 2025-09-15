@@ -124,14 +124,19 @@ export default class GameEngine {
     const unsub = settings.subscribe(() => this.applySettingsToAudio());
     this.unsubSettings = () => unsub();
     // Try to resume audio on first key interaction (user gesture requirement)
-    const resume = async () => {
+    const resumeOnce = async () => {
       await this.audio?.resume();
-      window.removeEventListener('keydown', resume, true);
-      this.disposeBag = this.disposeBag.filter((fn) => fn !== removeResume);
+      window.removeEventListener('keydown', resumeOnce, true);
+      window.removeEventListener('pointerdown', resumeOnce, true);
+      this.disposeBag = this.disposeBag.filter((fn) => fn !== removeResumeOnce);
     };
-    const removeResume = () => window.removeEventListener('keydown', resume, true);
-    window.addEventListener('keydown', resume, true);
-    this.disposeBag.push(removeResume);
+    const removeResumeOnce = () => {
+      window.removeEventListener('keydown', resumeOnce, true);
+      window.removeEventListener('pointerdown', resumeOnce, true);
+    };
+    window.addEventListener('keydown', resumeOnce, true);
+    window.addEventListener('pointerdown', resumeOnce, true);
+    this.disposeBag.push(removeResumeOnce);
 
     // Simple checkpoints for infinite mode - distance-based laps
     this.lap = new LapSystem([
