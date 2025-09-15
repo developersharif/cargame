@@ -130,7 +130,14 @@
         }
       }}
     >
-      <div class="modal" on:click|stopPropagation>
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        tabindex="0"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+      >
         <h3>Join Room</h3>
         <p>Enter the room ID shared by your friend</p>
         <input
@@ -169,7 +176,14 @@
         }
       }}
     >
-      <div class="modal" on:click|stopPropagation>
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        tabindex="0"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+      >
         <h3>Create Room</h3>
         <p>Start a new multiplayer race and invite friends</p>
         <div class="room-preview">
