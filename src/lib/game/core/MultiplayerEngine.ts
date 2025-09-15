@@ -9,6 +9,7 @@ import Track from '../entities/Track';
 import Car from '../entities/Car';
 import { settings } from '$lib/stores/settingsStore';
 import { get } from 'svelte/store';
+import CollisionSystem from '../systems/CollisionSystem';
 
 export interface MPPlayerInfo {
   id: string;
@@ -28,6 +29,7 @@ export default class MultiplayerEngine {
   private environment?: Environment;
   private track!: Track;
   private audio?: AudioSystem;
+  private collision!: CollisionSystem;
   private running = false;
   private disposeBag: Array<() => void> = [];
 
@@ -89,6 +91,9 @@ export default class MultiplayerEngine {
 
     this.track = new Track();
     this.scene.add(this.track.group);
+
+  // Collisions against static obstacles
+  this.collision = new CollisionSystem(this.track.obstacles);
 
     // Create cars for all players
     const ids = Array.from(this.players.keys());
@@ -188,6 +193,26 @@ export default class MultiplayerEngine {
     // Update track/environment with the local car progression
     this.track.update(local.car.group.position.z);
     this.environment?.update(local.car.group.position.z);
+
+    // Collisions for local player vs track obstacles (authoritative locally)
+    const p = local.car.group.position;
+    const halfX = 0.6; // matches chassis width ~1.2
+    const halfZ = 1.2; // matches chassis length ~2.4
+    const carAabb = { minX: p.x - halfX, maxX: p.x + halfX, minZ: p.z - halfZ, maxZ: p.z + halfZ } as any;
+    const beforeVel = local.car.getVelocityRef().clone();
+    const collided = this.collision.resolve(p, local.car.getVelocityRef(), carAabb);
+    if (collided) {
+      const afterVel = local.car.getVelocityRef();
+      const delta = beforeVel.clone().sub(afterVel);
+      const impact = THREE.MathUtils.clamp(delta.length() * 0.1, 0, 1);
+      this.audio?.playCollision(impact);
+    }
+
+    // Keep car within X track bounds (allow infinite Z)
+    const boundsX = 25;
+    if (Math.abs(p.x) > boundsX) {
+      p.x = THREE.MathUtils.clamp(p.x, -boundsX, boundsX);
+    }
 
     // Detect finish once; first to cross finishZ wins
     if (!this.winnerId) {

@@ -33,6 +33,12 @@ export default class Car {
   private wheels: { fl: THREE.Group; fr: THREE.Group; rl: THREE.Group; rr: THREE.Group } | null = null;
   private headlights: THREE.Mesh[] = [];
   private brakelights: THREE.Mesh[] = [];
+  // Light sources to cast illumination in scene
+  private headlightSpots: THREE.SpotLight[] = [];
+  private tailLightPoints: THREE.PointLight[] = [];
+  private reverseLights: THREE.Mesh[] = [];
+  private reverseLightPoints: THREE.PointLight[] = [];
+  private prevForwardSpeed = 0; // for detecting deceleration
 
   constructor(public config: CarConfig, color = 0x2196f3) {
   // Visual container (allows body roll/pitch without affecting physics root)
@@ -61,7 +67,7 @@ export default class Car {
     paintMaterial.map = clearcoatTexture;
 
   // Chassis with enhanced materials
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.35, 2.4), paintMaterial);
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.36, 2.5), paintMaterial);
     chassis.castShadow = true;
     chassis.receiveShadow = true;
     chassis.position.y = 0.32;
@@ -78,11 +84,29 @@ export default class Car {
     });
 
   // Cabin/top with glass material
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.28, 0.9), glassMaterial);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.3, 1.0), glassMaterial);
     cabin.castShadow = true;
     cabin.receiveShadow = true;
-    cabin.position.set(0, 0.55, -0.15);
+    cabin.position.set(0, 0.57, -0.1);
   this.visuals.add(cabin);
+
+    // Simple hood and bumpers to improve silhouette
+    const blackTrim = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.2, roughness: 0.7 });
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.08, 0.8), paintMaterial);
+  // Front is +Z; place hood toward +Z
+  hood.position.set(0, 0.48, 0.9);
+    hood.castShadow = true;
+  const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.24), blackTrim);
+  frontBumper.position.set(0, 0.26, 1.28);
+    frontBumper.castShadow = true;
+  const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.18, 0.24), blackTrim);
+  rearBumper.position.set(0, 0.26, -1.28);
+    rearBumper.castShadow = true;
+    const sideSkirtL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 1.8), blackTrim);
+    sideSkirtL.position.set(-0.65, 0.23, 0);
+    const sideSkirtR = sideSkirtL.clone();
+    sideSkirtR.position.x = 0.65;
+    this.visuals.add(hood, frontBumper, rearBumper, sideSkirtL, sideSkirtR);
 
     // Enhanced wheels with realistic materials
     const makeWheel = () => {
@@ -181,20 +205,79 @@ export default class Car {
     });
     
     // Enhanced headlight design
-    const headL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), headlightMaterial);
+  const headL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), headlightMaterial);
     const headR = headL.clone();
-    headL.position.set(-0.32, 0.27, -1.2);
-    headR.position.set(0.32, 0.27, -1.2);
+  // Place headlights at the front (+Z)
+  headL.position.set(-0.32, 0.29, 1.25);
+  headR.position.set(0.32, 0.29, 1.25);
     
     // LED-style brake lights
     const brakeL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.02), brakelightMaterial.clone());
     const brakeR = brakeL.clone();
-    brakeL.position.set(-0.34, 0.27, 1.2);
-    brakeR.position.set(0.34, 0.27, 1.2);
+  // Place brake lights at the rear (-Z)
+  brakeL.position.set(-0.34, 0.3, -1.25);
+  brakeR.position.set(0.34, 0.3, -1.25);
     
     this.visuals.add(headL, headR, brakeL, brakeR);
     this.headlights = [headL, headR];
     this.brakelights = [brakeL, brakeR];
+
+    // Reverse lights (white), initially off
+    const reverseMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0,
+      metalness: 0.0,
+      roughness: 0.2,
+      transparent: true,
+      opacity: 0.85
+    });
+  const revL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.02), reverseMat);
+    const revR = revL.clone();
+  // Reverse lights are also at rear (-Z)
+  revL.position.set(-0.12, 0.26, -1.26);
+  revR.position.set(0.12, 0.26, -1.26);
+    this.visuals.add(revL, revR);
+    this.reverseLights = [revL, revR];
+
+    // Actual light sources for better look & feel
+    // Headlight spotlights
+    const makeHeadSpot = (anchor: THREE.Object3D) => {
+      const spot = new THREE.SpotLight(0xffffff, 1.2, 12, THREE.MathUtils.degToRad(25), 0.35, 1.2);
+      spot.castShadow = true;
+      // Slightly forward from the headlight mesh; aim forward (+Z)
+      spot.position.copy(anchor.position).add(new THREE.Vector3(0, 0, 0.05));
+      spot.target.position.set(anchor.position.x, anchor.position.y - 0.05, anchor.position.z + 4);
+      this.visuals.add(spot, spot.target);
+      return spot;
+    };
+    const spotL = makeHeadSpot(headL);
+    const spotR = makeHeadSpot(headR);
+    this.headlightSpots = [spotL, spotR];
+
+    // Tail/brake point lights (soft red glow)
+    const makeTailPoint = (pos: THREE.Vector3) => {
+      const p = new THREE.PointLight(0xff2211, 0.2, 4, 1.8);
+      p.position.copy(pos);
+      this.visuals.add(p);
+      return p;
+    };
+    this.tailLightPoints = [
+      makeTailPoint(brakeL.position.clone()),
+      makeTailPoint(brakeR.position.clone())
+    ];
+
+    // Reverse point lights (white), off by default
+    const makeReversePoint = (pos: THREE.Vector3) => {
+      const p = new THREE.PointLight(0xffffff, 0.0, 4, 2.0);
+      p.position.copy(pos);
+      this.visuals.add(p);
+      return p;
+    };
+    this.reverseLightPoints = [
+      makeReversePoint(revL.position.clone()),
+      makeReversePoint(revR.position.clone())
+    ];
   }
 
   setPosition(x: number, y: number, z: number) {
@@ -339,6 +422,10 @@ export default class Car {
     // Update position
   this.group.position.addScaledVector(this.velocity, dt);
 
+  // Store deceleration for light logic
+  const decel = (this.prevForwardSpeed - forwardComponent) / Math.max(1e-6, dt);
+  this.prevForwardSpeed = forwardComponent;
+
   // Visuals: steer front wheels and rotate them based on forward speed
     if (this.wheels) {
       const steerAngle = THREE.MathUtils.degToRad(25) * this.steering;
@@ -370,12 +457,27 @@ export default class Car {
       this.wheels.rr.position.y = 0.28 + compRear;
     }
 
-    // Brake lights intensity based on brake input and reverse state
-    const braking = this.brake > 0.1 || (this.throttle === 0 && this.velocity.length() > 0.5);
-    const intensity = braking ? 3.5 : 0.0;
+  // Tail/brake lights: keep a dim tail glow; ramp up when braking, hard decel, or reversing
+  const baseTail = 0.6;
+  const isHardDecel = decel > 6.0; // m/s^2 threshold
+  const reversingForTail = forwardComponent < -0.2; // brighten red while backing up
+  const braking = this.brake > 0.1 || isHardDecel || reversingForTail;
+  const targetBrakeEmissive = braking ? 3.8 : baseTail;
     for (const m of this.brakelights) {
       const mat = m.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, intensity, Math.min(1, 10 * dt));
+      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetBrakeEmissive, Math.min(1, 12 * dt));
     }
+    // Sync tail light point lights: dim glow baseline, brighter on brake
+    const targetTailLight = braking ? 1.1 : 0.18;
+    this.tailLightPoints.forEach((p) => (p.intensity = THREE.MathUtils.lerp(p.intensity, targetTailLight, Math.min(1, 10 * dt))));
+
+    // Reverse lights: on when moving significantly backward and not braking hard
+    const reversing = forwardComponent < -0.4 && this.brake < 0.2;
+    const revTarget = reversing ? 2.0 : 0.0;
+    for (const m of this.reverseLights) {
+      const mat = m.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, revTarget, Math.min(1, 10 * dt));
+    }
+    this.reverseLightPoints.forEach((p) => (p.intensity = THREE.MathUtils.lerp(p.intensity, reversing ? 0.8 : 0.0, Math.min(1, 10 * dt))));
   }
 }
