@@ -157,7 +157,7 @@
 
   function copyRoomLink() {
     if (roomData?.id) {
-      const url = `${location.origin}/lobby/${roomData.id}`;
+      const url = `${location.origin}${base}/lobby/${roomData.id}`;
       navigator.clipboard.writeText(url);
       copiedLink = true;
       setTimeout(() => (copiedLink = false), 1500);
@@ -336,7 +336,7 @@
             <div><strong>ID:</strong> {roomData.id}</div>
             <div style="margin-top: .5rem; word-break: break-all;">
               <strong>Link:</strong>
-              {location.origin}/lobby/{roomData.id}
+              {location.origin}{base}/lobby/{roomData.id}
             </div>
           </div>
           <div class="lobby-actions" style="margin-top: 1rem;">
