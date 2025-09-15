@@ -17,27 +17,28 @@
   },
   "dependencies": {
     "firebase": "^10.12.5",
+    "lucide-svelte": "^0.544.0",
     "peerjs": "^1.5.2",
     "three": "^0.128.0"
   },
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@sveltejs/adapter-static": "^3.0.4",
     "@sveltejs/kit": "^2.5.10",
     "@types/node": "^20.12.12",
+    "@types/three": "^0.128.0",
     "@typescript-eslint/eslint-plugin": "^8.8.1",
     "@typescript-eslint/parser": "^8.8.1",
     "eslint": "^9.11.1",
     "eslint-plugin-svelte": "^2.44.1",
-    "@types/three": "^0.128.0",
+    "gh-pages": "^6.1.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
+    "svelte-eslint-parser": "^0.41.0",
     "tslib": "^2.6.3",
     "typescript": "^5.5.4",
     "vite": "^6.3.0",
     "vitest": "^2.0.5",
-    "svelte-eslint-parser": "^0.41.0",
-    "gh-pages": "^6.1.1",
-    "ws": "^8.18.0",
-    "@opentelemetry/api": "^1.9.0"
+    "ws": "^8.18.0"
   }
 }

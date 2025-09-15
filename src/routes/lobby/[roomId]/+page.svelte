@@ -5,6 +5,19 @@
   import { onMount, onDestroy } from 'svelte';
   import { isFirebaseAvailable } from '$lib/config/firebase.js';
   import RoomManager, { type Room, type Player } from '$lib/multiplayer/RoomManager.js';
+  import {
+    X,
+    Flag,
+    Clipboard,
+    ClipboardCheck,
+    Crown,
+    Car,
+    CircleDot,
+    User,
+    Rocket,
+    Copy,
+    Link,
+  } from 'lucide-svelte';
 
   $: roomId = $page.params.roomId;
 
@@ -182,7 +195,9 @@
 <div class="lobby-container">
   {#if errorMessage}
     <div class="error-screen">
-      <div class="error-icon">❌</div>
+      <div class="error-icon">
+        <X size={24} color="#ff4757" />
+      </div>
       <h2>Connection Failed</h2>
       <p>{errorMessage}</p>
       <button class="btn-primary" on:click={() => goto(`${base}/`)}> Back to Menu </button>
@@ -196,23 +211,35 @@
   {:else if roomData}
     <div class="lobby-content">
       <div class="room-header">
-        <h1>🏁 Racing Lobby</h1>
+        <h1 class="icon-text">
+          <Flag size={28} />
+          Racing Lobby
+        </h1>
         <div class="room-info">
           <div class="room-id">
             <span class="label">Room ID:</span>
             <div class="id-container">
               <span class="room-code">{roomData.id}</span>
               <button class="copy-btn" on:click={copyRoomId} title="Copy Room ID">
-                {copied ? '✅' : '📋'}
+                {#if copied}
+                  <ClipboardCheck size={16} color="#10ac84" />
+                {:else}
+                  <Clipboard size={16} />
+                {/if}
               </button>
             </div>
           </div>
           <div class="status-badge {roomData.status}">
-            {roomData.status === 'waiting'
-              ? '⏳ Waiting'
-              : roomData.status === 'racing'
-                ? '🏁 Racing'
-                : '🏆 Finished'}
+            {#if roomData.status === 'waiting'}
+              ⏳ Waiting
+            {:else if roomData.status === 'racing'}
+              <span class="icon-text">
+                <Flag size={16} />
+                Racing
+              </span>
+            {:else}
+              🏆 Finished
+            {/if}
           </div>
         </div>
       </div>
@@ -223,7 +250,11 @@
           {#each Object.values(roomData.players) as player}
             <div class="player-card {player.isHost ? 'host' : ''}">
               <div class="player-avatar">
-                {player.isHost ? '👑' : '🏎️'}
+                {#if player.isHost}
+                  <Crown size={20} color="#f39c12" />
+                {:else}
+                  <Car size={20} />
+                {/if}
               </div>
               <div class="player-info">
                 <span class="player-name">{player.name || 'Anonymous'}</span>
@@ -232,7 +263,11 @@
                 </span>
               </div>
               <div class="connection-status">
-                {connectedPeers.includes(player.id) || player.isHost ? '🟢' : '🔴'}
+                {#if connectedPeers.includes(player.id) || player.isHost}
+                  <CircleDot size={12} color="#10ac84" />
+                {:else}
+                  <CircleDot size={12} color="#ff4757" />
+                {/if}
               </div>
             </div>
           {/each}
@@ -240,7 +275,9 @@
           <!-- Empty slots -->
           {#each Array(4 - Object.keys(roomData.players).length) as _, i}
             <div class="player-card empty">
-              <div class="player-avatar">👤</div>
+              <div class="player-avatar">
+                <User size={20} color="#95a5a6" />
+              </div>
               <div class="player-info">
                 <span class="player-name">Waiting for player...</span>
               </div>
@@ -269,8 +306,17 @@
 
       <div class="lobby-actions">
         {#if isHost}
-          <button class="btn-primary start-btn" on:click={startGame} disabled={!canStartGame}>
-            {canStartGame ? '🚀 Start Race' : 'Waiting for Players...'}
+          <button
+            class="btn-primary start-btn icon-button"
+            on:click={startGame}
+            disabled={!canStartGame}
+          >
+            {#if canStartGame}
+              <Rocket size={16} />
+              Start Race
+            {:else}
+              Waiting for Players...
+            {/if}
           </button>
         {:else}
           <div class="waiting-message">
@@ -294,12 +340,24 @@
             </div>
           </div>
           <div class="lobby-actions" style="margin-top: 1rem;">
-            <button class="btn-secondary" on:click={copyRoomId}
-              >{copied ? '✅ ID Copied' : 'Copy ID'}</button
-            >
-            <button class="btn-secondary" on:click={copyRoomLink}
-              >{copiedLink ? '✅ Link Copied' : 'Copy Link'}</button
-            >
+            <button class="btn-secondary icon-button" on:click={copyRoomId}>
+              {#if copied}
+                <ClipboardCheck size={16} />
+                ID Copied
+              {:else}
+                <Copy size={16} />
+                Copy ID
+              {/if}
+            </button>
+            <button class="btn-secondary icon-button" on:click={copyRoomLink}>
+              {#if copiedLink}
+                <ClipboardCheck size={16} />
+                Link Copied
+              {:else}
+                <Link size={16} />
+                Copy Link
+              {/if}
+            </button>
           </div>
         </div>
       {/if}

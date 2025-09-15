@@ -3,6 +3,7 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { isFirebaseAvailable } from '$lib/config/firebase.js';
+  import { Car, Gamepad2, Globe, User, Flag, Settings } from 'lucide-svelte';
 
   let roomId = '';
   let showJoinRoom = false;
@@ -58,7 +59,9 @@
 
 <div class="container">
   <div class="hero">
-    <div class="logo">🏎️</div>
+    <div class="logo">
+      <Car size={48} />
+    </div>
     <h1>Speed Racers</h1>
     <p class="subtitle">Experience the thrill of high-speed racing in stunning 3D</p>
   </div>
@@ -77,7 +80,9 @@
   <div class="game-modes">
     <!-- Single Player -->
     <div class="mode-card single-player">
-      <div class="mode-icon">🎮</div>
+      <div class="mode-icon">
+        <Gamepad2 size={32} />
+      </div>
       <h3>Single Player</h3>
       <p>Practice your skills and master the tracks</p>
       <button class="primary-btn" on:click={startSinglePlayer} disabled={!playerName.trim()}>
@@ -87,7 +92,9 @@
 
     <!-- Multiplayer -->
     <div class="mode-card multiplayer">
-      <div class="mode-icon">🌐</div>
+      <div class="mode-icon">
+        <Globe size={32} />
+      </div>
       <h3>Multiplayer</h3>
       <p>Race against friends in real-time</p>
 
@@ -142,8 +149,14 @@
         <h3>Create Room</h3>
         <p>Start a new multiplayer race and invite friends</p>
         <div class="room-preview">
-          <span>👤 Host: {playerName || 'Anonymous'}</span>
-          <span>🏁 Ready to race!</span>
+          <span class="icon-text">
+            <User size={16} />
+            Host: {playerName || 'Anonymous'}
+          </span>
+          <span class="icon-text">
+            <Flag size={16} />
+            Ready to race!
+          </span>
         </div>
         <div class="modal-actions">
           <button class="cancel-btn" on:click={() => (showCreateRoom = false)}> Cancel </button>
@@ -156,7 +169,10 @@
   {/if}
 
   <div class="footer-actions">
-    <button class="settings-btn" on:click={openSettings}> ⚙️ Settings </button>
+    <button class="settings-btn icon-button" on:click={openSettings}>
+      <Settings size={16} />
+      Settings
+    </button>
   </div>
 </div>
 

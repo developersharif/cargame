@@ -5,6 +5,7 @@
   import RoomManager from '$lib/multiplayer/RoomManager';
   import WebSocketClient from '$lib/multiplayer/WebSocketClient';
   import { base } from '$app/paths';
+  import { Trophy } from 'lucide-svelte';
 
   let container: HTMLDivElement | null = null;
   let engine: MultiplayerEngine | null = null;
@@ -156,7 +157,10 @@
   {#if countdown > 0}
     <div class="countdown">{countdown}</div>
   {:else if winnerName}
-    <div class="winner">🏆 Winner: {winnerName}</div>
+    <div class="winner icon-text">
+      <Trophy size={20} />
+      Winner: {winnerName}
+    </div>
   {/if}
   <div class="speed">{speed} km/h</div>
   <div class="leaderboard">

@@ -6,3 +6,23 @@
 </svelte:head>
 
 <slot />
+
+<style>
+  :global(.icon-wrapper) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  :global(.icon-button) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  :global(.icon-text) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+</style>
