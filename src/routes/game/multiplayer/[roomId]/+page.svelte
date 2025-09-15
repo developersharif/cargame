@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
-  import MultiplayerEngine, { type MPPlayerInfo } from '$lib/game/core/MultiplayerEngine';
+  import MultiplayerEngine from '$lib/game/core/MultiplayerEngine';
+  import type { MPPlayerInfo } from '$lib/game/core/MultiplayerEngine';
   import RoomManager from '$lib/multiplayer/RoomManager';
   import WebSocketClient from '$lib/multiplayer/WebSocketClient';
   import { base } from '$app/paths';
-  import { Trophy } from 'lucide-svelte';
+  import { Trophy, Home } from 'lucide-svelte';
 
   let container: HTMLDivElement | null = null;
   let engine: MultiplayerEngine | null = null;
@@ -101,7 +102,6 @@
         } else if (msg.t === 'winner') {
           if (!winnerName) {
             winnerName = msg.name || 'Unknown';
-            engine.freeze();
             canRestart = true;
           }
         } else if (msg.t === 'restart') {
@@ -120,7 +120,6 @@
           if (winnerId && !winnerName) {
             winnerName = infos.find((i) => i.id === winnerId)?.name || 'Unknown';
             // Freeze locally and announce to others
-            engine.freeze();
             ws?.send({ t: 'winner', id: winnerId, name: winnerName });
             canRestart = true;
           }
@@ -155,6 +154,10 @@
 <div class="game-root" bind:this={container}></div>
 
 <div class="hud">
+  <a class="home-btn" href={`${base}/`} aria-label="Home" title="Home" style="pointer-events:auto">
+    <Home size={18} />
+    <span>Home</span>
+  </a>
   {#if countdown > 0}
     <div class="countdown">{countdown}</div>
   {:else if winnerName}
@@ -218,6 +221,8 @@
     left: 12px;
     right: 12px;
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 12px;
     justify-content: space-between;
     color: #fff;
@@ -232,6 +237,7 @@
     padding: 8px 12px;
     border-radius: 6px;
     min-width: 180px;
+    max-width: 40vw;
   }
   .lb-title {
     font-weight: 700;
@@ -293,9 +299,29 @@
 
   .audio-controls {
     position: fixed;
-    top: 12px;
+    top: 18px;
     left: 50%;
     transform: translateX(-50%);
+  }
+  .home-btn {
+    position: fixed;
+    right: 16px;
+    bottom: 64px; /* keep clear of Restart button at bottom-right */
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    font-weight: 700;
+    pointer-events: auto;
+  }
+  .home-btn:hover {
+    background: rgba(0, 0, 0, 0.7);
   }
   .mute-btn {
     background: rgba(0, 0, 0, 0.55);

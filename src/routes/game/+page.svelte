@@ -3,6 +3,7 @@
   import GameEngine from '$lib/game/core/GameEngine';
   import { settings } from '$lib/stores/settingsStore';
   import { get } from 'svelte/store';
+  import { base } from '$app/paths';
 
   let container: HTMLDivElement | null = null;
   let engine: GameEngine | null = null;
@@ -82,6 +83,9 @@
 
 <div class="game-root" bind:this={container}></div>
 <div class="hud">
+  <a class="home-btn" href={`${base}/`} aria-label="Home" title="Home" style="pointer-events:auto"
+    >Home</a
+  >
   <div class="score-section">
     <div class="score">Score: {score.toLocaleString()}</div>
     <div class="distance">Distance: {distance}m</div>
@@ -149,6 +153,8 @@
     display: flex;
     justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
     color: #fff;
     pointer-events: none;
     z-index: 1000;
@@ -158,6 +164,26 @@
     padding: 6px 10px;
     border-radius: 4px;
     font-weight: 700;
+  }
+  .hud .home-btn {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    font-weight: 700;
+    pointer-events: auto;
+  }
+  .hud .home-btn:hover {
+    background: rgba(0, 0, 0, 0.7);
   }
   .hud .score-section {
     background: rgba(0, 0, 0, 0.6);

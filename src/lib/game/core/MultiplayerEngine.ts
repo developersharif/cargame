@@ -42,8 +42,8 @@ export default class MultiplayerEngine {
   private finishZ = 600; // simple finish line z position
   private winnerId: string | null = null;
   private frozen = false;
-  private finishLine?: THREE.Mesh;
-  private finishLineMat?: THREE.MeshBasicMaterial;
+  private finishGate?: THREE.Group;
+  private finishGateBannerMat?: THREE.MeshBasicMaterial;
   private throttleInput = 0;
   private muted = false;
 
@@ -99,8 +99,8 @@ export default class MultiplayerEngine {
   // Collisions against static obstacles
   this.collision = new CollisionSystem(this.track.obstacles);
 
-    // Finish line visual
-    this.createOrUpdateFinishLine();
+  // Finish gate visual (non-blocking)
+  this.createOrUpdateFinishGate();
 
     // Create cars for all players
     const ids = Array.from(this.players.keys());
@@ -224,19 +224,19 @@ export default class MultiplayerEngine {
     this.track.update(local.car.group.position.z);
     this.environment?.update(local.car.group.position.z);
 
-    // Show finish line when approaching
-    if (this.finishLine && this.finishLineMat) {
+    // Show finish gate banner fade-in when approaching; does not affect physics
+    if (this.finishGate && this.finishGateBannerMat) {
       const d = this.finishZ - local.car.group.position.z;
       if (d <= 0) {
-        this.finishLineMat.opacity = 1.0;
-        this.finishLine.visible = true;
-      } else if (d < 140) {
-        const t = 1 - d / 140; // fade in over last 140m
-        this.finishLineMat.opacity = THREE.MathUtils.clamp(0.15 + 0.85 * t, 0.15, 1);
-        this.finishLine.visible = true;
+        this.finishGateBannerMat.opacity = 1.0;
+        this.finishGate.visible = true;
+      } else if (d < 160) {
+        const t = 1 - d / 160; // fade in over last 160m
+        this.finishGateBannerMat.opacity = THREE.MathUtils.clamp(0.12 + 0.88 * t, 0.12, 1);
+        this.finishGate.visible = true;
       } else {
-        this.finishLineMat.opacity = 0.12;
-        this.finishLine.visible = false; // keep scene clean when far away
+        this.finishGateBannerMat.opacity = 0.12;
+        this.finishGate.visible = false; // keep scene clean when far away
       }
     }
 
@@ -336,7 +336,10 @@ export default class MultiplayerEngine {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderSystem.updateSize?.(w, h);
+    // Update render system if it exposes updateSize
+    if (this.renderSystem.updateSize) {
+      this.renderSystem.updateSize(w, h);
+    }
   };
 
   public destroy() {
@@ -369,11 +372,11 @@ export default class MultiplayerEngine {
       p.car.reset(new THREE.Vector3(0, 0, 0), 0);
     });
     this.relineUpGrid();
-    // Reset finish line visibility/opacity
-    if (this.finishLine && this.finishLineMat) {
-      this.finishLine.position.set(0, 0.01, this.finishZ);
-      this.finishLine.visible = false;
-      this.finishLineMat.opacity = 0.12;
+    // Reset finish gate visibility/opacity
+    if (this.finishGate && this.finishGateBannerMat) {
+      this.finishGate.position.set(0, 0, this.finishZ);
+      this.finishGate.visible = false;
+      this.finishGateBannerMat.opacity = 0.12;
     }
     // Restart countdown
     this.countdownStartAt = startAtEpochMs || Date.now();
@@ -429,8 +432,8 @@ export default class MultiplayerEngine {
     const entry = this.players.get(id);
     if (!entry) return;
     // Remove from scene
-    try { this.scene.remove(entry.car.group); } catch {
-      // ignore
+    try { this.scene.remove(entry.car.group); } catch (e) {
+      void e; // ignore
     }
     this.players.delete(id);
     if (!this.raceStarted) this.relineUpGrid();
@@ -565,33 +568,72 @@ export default class MultiplayerEngine {
     return sprite;
   }
 
-  private createOrUpdateFinishLine() {
-    // Create a simple checkered finish line painted on the ground
-    const width = 50; // spans track width (~boundsX*2)
-    const depth = 1.2; // stripe thickness
-    if (!this.finishLineMat) {
-      const tex = this.makeCheckerTexture(12, 2); // columns, rows
+  private createOrUpdateFinishGate() {
+    // Build a simple arch gate with two posts and a checkered banner; purely visual
+    const gate = new THREE.Group();
+    const postMat = new THREE.MeshBasicMaterial({ color: 0x22262a });
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0x2a2f34 });
+
+    // Dimensions
+    const halfSpan = 12; // posts at +-12m (fits within track boundsX=25)
+    const postW = 0.6, postD = 0.8, postH = 4.2;
+    const beamH = 0.5, beamD = 0.7;
+
+    // Posts
+    const postGeo = new THREE.BoxGeometry(postW, postH, postD);
+    const leftPost = new THREE.Mesh(postGeo, postMat);
+    const rightPost = new THREE.Mesh(postGeo, postMat);
+    leftPost.position.set(-halfSpan, postH / 2, 0);
+    rightPost.position.set(halfSpan, postH / 2, 0);
+    gate.add(leftPost, rightPost);
+
+    // Top beam
+    const beamGeo = new THREE.BoxGeometry(halfSpan * 2 + postW, beamH, beamD);
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set(0, postH + beamH / 2, 0);
+    gate.add(beam);
+
+    // Checkered banner hanging below the beam
+    const bannerW = halfSpan * 2 - 2; // a bit inset from posts
+    const bannerH = 1.8;
+    const bannerGeo = new THREE.PlaneGeometry(bannerW, bannerH);
+    if (!this.finishGateBannerMat) {
+      const tex = this.makeFinishBannerTexture(20, 4);
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.needsUpdate = true;
-      this.finishLineMat = new THREE.MeshBasicMaterial({
+      this.finishGateBannerMat = new THREE.MeshBasicMaterial({
         map: tex,
         transparent: true,
         opacity: 0.12,
-        depthWrite: false
+        depthWrite: false,
+        side: THREE.DoubleSide
       });
     }
-    const geo = new THREE.PlaneGeometry(width, depth);
-    const mesh = new THREE.Mesh(geo, this.finishLineMat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(0, 0.01, this.finishZ);
-    mesh.visible = false; // shown when near
-    if (this.finishLine) {
-      try { this.scene.remove(this.finishLine); } catch {
-        // ignore
+    // Ensure the texture has the FINISH text if material existed from an older session
+    else {
+      const newTex = this.makeFinishBannerTexture(20, 4);
+      newTex.wrapS = newTex.wrapT = THREE.ClampToEdgeWrapping;
+      newTex.needsUpdate = true;
+      this.finishGateBannerMat.map = newTex;
+      this.finishGateBannerMat.needsUpdate = true;
+    }
+    const banner = new THREE.Mesh(bannerGeo, this.finishGateBannerMat);
+    banner.rotation.y = Math.PI; // ensure texture faces camera similarly on both sides
+    banner.position.set(0, postH - bannerH / 2, 0);
+    gate.add(banner);
+
+    // Place gate
+    gate.position.set(0, 0, this.finishZ);
+    gate.visible = false;
+
+    // Replace old gate if any
+    if (this.finishGate) {
+      try { this.scene.remove(this.finishGate); } catch (e) {
+        void e; // ignore error
       }
     }
-    this.finishLine = mesh;
-    this.scene.add(mesh);
+    this.finishGate = gate;
+    this.scene.add(gate);
   }
 
   private makeCheckerTexture(cols = 8, rows = 2): THREE.CanvasTexture {
@@ -608,6 +650,54 @@ export default class MultiplayerEngine {
         ctx.fillRect(c * cw, r * ch, cw, ch);
       }
     }
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  private makeFinishBannerTexture(cols = 20, rows = 4): THREE.CanvasTexture {
+    // Create a high-res checker background with bold 'FINISH' text
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024; // wide banner
+    canvas.height = 256; // banner height
+    const ctx = canvas.getContext('2d')!;
+    // Checker background
+    const cw = canvas.width / cols;
+    const ch = canvas.height / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const black = (r + c) % 2 === 0;
+        ctx.fillStyle = black ? '#111' : '#eee';
+        ctx.fillRect(c * cw, r * ch, cw, ch);
+      }
+    }
+    // Semi-transparent dark overlay for readability
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // FINISH text
+    const text = 'FINISH';
+    // Compute font size to fit width with padding
+    let fontSize = 180;
+    const padX = 40;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    do {
+      ctx.font = `900 ${fontSize}px system-ui,-apple-system,Segoe UI,Roboto,sans-serif`;
+      const w = ctx.measureText(text).width;
+      if (w <= canvas.width - padX * 2 || fontSize <= 72) break;
+      fontSize -= 4;
+    } while (fontSize > 72);
+    // Draw with shadow and stroke for contrast
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 4;
+    ctx.lineWidth = Math.max(6, Math.floor(fontSize * 0.06));
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillStyle = '#ffffff';
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2 + 6; // a bit lower aesthetically
+    ctx.strokeText(text, cx, cy);
+    ctx.fillText(text, cx, cy);
+    ctx.restore();
     return new THREE.CanvasTexture(canvas);
   }
 }
