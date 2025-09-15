@@ -117,7 +117,7 @@ export default class MultiplayerEngine {
 
       const label = this.createNameLabel(this.players.get(id)!.info.name);
       car.group.add(label);
-      label.position.set(0, 2.2, 0);
+      label.position.set(0, 1.8, 0); // closer to car roof
 
       this.players.set(id, { ...this.players.get(id)!, car, label });
     });
@@ -193,6 +193,20 @@ export default class MultiplayerEngine {
     // Update track/environment with the local car progression
     this.track.update(local.car.group.position.z);
     this.environment?.update(local.car.group.position.z);
+
+    const camPos = this.camera.position;
+    this.players.forEach(({ car, label }) => {
+      if (!label) return;
+      const d = camPos.distanceTo(car.group.position);
+      const minD = 8; // start scaling after this distance
+      const maxD = 45; // far distance
+      const t = THREE.MathUtils.clamp((d - minD) / (maxD - minD), 0, 1);
+      const scaleMul = THREE.MathUtils.lerp(1.0, 0.65, t);
+      const base = label.userData?.baseScale || { w: 1.05, h: 0.35 };
+      label.scale.set(base.w * scaleMul, base.h * scaleMul, 1);
+      const mat = label.material as THREE.SpriteMaterial;
+      if (mat) mat.opacity = THREE.MathUtils.lerp(1.0, 0.85, t);
+    });
 
     // Collisions for local player vs track obstacles (authoritative locally)
     const p = local.car.group.position;
@@ -312,7 +326,7 @@ export default class MultiplayerEngine {
     this.scene.add(car.group);
     const label = this.createNameLabel(info.name);
     car.group.add(label);
-    label.position.set(0, 2.2, 0);
+    label.position.set(0, 1.8, 0); // closer to car roof
     this.players.set(info.id, { info, car, label });
     if (!this.raceStarted) this.relineUpGrid();
   }
@@ -360,22 +374,83 @@ export default class MultiplayerEngine {
 
   private createNameLabel(text: string): THREE.Sprite {
     const canvas = document.createElement('canvas');
-    canvas.width = 256; canvas.height = 64;
+    canvas.width = 256; canvas.height = 96; // a bit taller for tail
     const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0,0,canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px sans-serif';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const padX = 18;
+    const padY = 10;
+    const bubbleW = canvas.width - padX * 2;
+    const bubbleH = 56; // bubble body height
+    const tailH = 12;   // tail height
+    const radius = 12;
+    const bubbleX = padX;
+    const bubbleY = (canvas.height - bubbleH - tailH) / 2; // center body; tail below
+
+    // Determine font size to fit within bubbleW
+    let fontSize = 22; // smaller, professional baseline
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width/2, canvas.height/2);
+    ctx.fillStyle = '#fff';
+    do {
+      ctx.font = `700 ${fontSize}px system-ui,-apple-system,Segoe UI,Roboto,sans-serif`;
+      const width = ctx.measureText(text).width;
+      if (width <= bubbleW - padX || fontSize <= 13) break;
+      fontSize -= 1;
+    } while (fontSize > 13);
+
+    // Draw rounded rect bubble
+    const drawRoundedRect = (x: number, y: number, w: number, h: number, r: number) => {
+      const rr = Math.min(r, h / 2, w / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    };
+
+    // Background with subtle shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    drawRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, radius);
+    ctx.fillStyle = 'rgba(20,20,24,0.68)';
+    ctx.fill();
+    ctx.restore();
+
+    // Tail (triangle) centered at bottom of bubble
+    const tailX = bubbleX + bubbleW / 2;
+    const tailTopY = bubbleY + bubbleH - 1;
+    ctx.beginPath();
+    ctx.moveTo(tailX - 10, tailTopY);
+    ctx.lineTo(tailX + 10, tailTopY);
+    ctx.lineTo(tailX, tailTopY + tailH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(20,20,24,0.68)';
+    ctx.fill();
+
+    // Thin stroke for definition
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    drawRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, radius);
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, canvas.width / 2, bubbleY + bubbleH / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(2.5, 0.6, 1);
+    // Compact base size; per-frame scaling will adjust
+    const baseW = 1.05;
+    const baseH = 0.35;
+    sprite.scale.set(baseW, baseH, 1);
+    (sprite as any).userData = { ...(sprite as any).userData, baseScale: { w: baseW, h: baseH } };
     return sprite;
   }
 }
