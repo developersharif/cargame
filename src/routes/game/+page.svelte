@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import GameEngine from '$lib/game/core/GameEngine';
+  import MobileControls from '$lib/components/MobileControls.svelte';
   import { settings } from '$lib/stores/settingsStore';
   import { get } from 'svelte/store';
   import { base } from '$app/paths';
@@ -79,9 +80,39 @@
     if (speed <= 160) return '#ff0000'; // Red for high speed
     return '#ff00ff'; // Magenta for extreme speed
   }
+
+  // Mobile control handlers
+  function handleMobileThrottle(value: number) {
+    engine?.['input']?.setMobileThrottle(value);
+  }
+
+  function handleMobileBrake(value: number) {
+    engine?.['input']?.setMobileBrake(value);
+  }
+
+  function handleMobileSteer(value: number) {
+    engine?.['input']?.setMobileSteer(value);
+  }
+
+  function handleMobileHandbrake(pressed: boolean) {
+    engine?.['input']?.setMobileHandbrake(pressed);
+  }
+
+  function handleMobileBoost(pressed: boolean) {
+    engine?.['input']?.setMobileBoost(pressed);
+  }
 </script>
 
 <div class="game-root" bind:this={container}></div>
+
+<!-- Mobile Controls -->
+<MobileControls
+  onThrottle={handleMobileThrottle}
+  onBrake={handleMobileBrake}
+  onSteer={handleMobileSteer}
+  onHandbrake={handleMobileHandbrake}
+  onBoost={handleMobileBoost}
+/>
 <div class="hud">
   <a class="home-btn" href={`${base}/`} aria-label="Home" title="Home" style="pointer-events:auto"
     >Home</a
@@ -303,5 +334,48 @@
     text-align: center;
     text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
     letter-spacing: 1px;
+  }
+
+  /* Mobile responsive adjustments */
+  @media (max-width: 768px) {
+    .hud .help {
+      display: none; /* Hide keyboard controls on mobile */
+    }
+
+    .hud .speed-indicator {
+      width: 180px;
+      padding: 6px;
+    }
+
+    .hud .score-section {
+      font-size: 0.9rem;
+      min-width: 120px;
+      padding: 6px 10px;
+    }
+
+    .hud .score {
+      font-size: 1rem;
+    }
+
+    .hud {
+      gap: 8px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hud .speed-indicator {
+      width: 150px;
+      padding: 5px;
+    }
+
+    .hud .speed-indicator .speed-text {
+      font-size: 0.9rem;
+    }
+
+    .hud .score-section {
+      font-size: 0.85rem;
+      min-width: 110px;
+      padding: 5px 8px;
+    }
   }
 </style>

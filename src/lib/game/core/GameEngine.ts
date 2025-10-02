@@ -21,7 +21,7 @@ export default class GameEngine {
   private renderer: THREE.WebGLRenderer;
   private clock: THREE.Clock;
   private physics: PhysicsEngine;
-  private input: InputManager;
+  public input: InputManager; // Public for mobile controls access
   private renderSystem: RenderSystem;
   private chaseCamera: ChaseCamera;
   private running = false;
@@ -176,14 +176,13 @@ export default class GameEngine {
   public update(deltaTime: number) {
     this.physics.update(deltaTime);
 
-    // Read input
+    // Read input (supports both keyboard and mobile)
   const throttle = Number(this.input.isDown('ArrowUp') || this.input.isDown('KeyW'));
   const brake = Number(this.input.isDown('ArrowDown') || this.input.isDown('KeyS'));
   const handbrake = this.input.isDown('Space');
   const boost = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
-    const steerLeft = Number(this.input.isDown('ArrowLeft') || this.input.isDown('KeyA'));
-    const steerRight = Number(this.input.isDown('ArrowRight') || this.input.isDown('KeyD'));
-    const steering = THREE.MathUtils.clamp((steerLeft - steerRight) * this.steerSensitivity, -1, 1);
+    // Use getSteerValue for better mobile support
+    const steering = THREE.MathUtils.clamp(this.input.getSteerValue() * this.steerSensitivity, -1, 1);
   this.car.setInputs({ throttle, brake, steering, handbrake, boost });
   this.throttleInput = throttle;
     this.car.update(deltaTime);

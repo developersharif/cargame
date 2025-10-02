@@ -24,7 +24,7 @@ export default class MultiplayerEngine {
   private renderer: THREE.WebGLRenderer;
   private clock: THREE.Clock;
   private physics: PhysicsEngine;
-  private input: InputManager;
+  public input: InputManager; // Public for mobile controls access
   private renderSystem: RenderSystem;
   private chaseCamera: ChaseCamera;
   private environment?: Environment;
@@ -207,15 +207,14 @@ export default class MultiplayerEngine {
       }
     }
 
-    // Apply inputs only after countdown
+    // Apply inputs only after countdown (supports both keyboard and mobile)
     if (this.raceStarted) {
       const throttle = Number(this.input.isDown('ArrowUp') || this.input.isDown('KeyW'));
       const brake = Number(this.input.isDown('ArrowDown') || this.input.isDown('KeyS'));
       const handbrake = this.input.isDown('Space');
       const boost = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
-      const steerLeft = Number(this.input.isDown('ArrowLeft') || this.input.isDown('KeyA'));
-      const steerRight = Number(this.input.isDown('ArrowRight') || this.input.isDown('KeyD'));
-      const steering = THREE.MathUtils.clamp(steerLeft - steerRight, -1, 1);
+      // Use getSteerValue for better mobile support
+      const steering = THREE.MathUtils.clamp(this.input.getSteerValue(), -1, 1);
       local.car.setInputs({ throttle, brake, steering, handbrake, boost });
       this.throttleInput = throttle;
     } else {

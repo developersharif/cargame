@@ -5,6 +5,7 @@
   import type { MPPlayerInfo } from '$lib/game/core/MultiplayerEngine';
   import RoomManager from '$lib/multiplayer/RoomManager';
   import WebSocketClient from '$lib/multiplayer/WebSocketClient';
+  import MobileControls from '$lib/components/MobileControls.svelte';
   import { base } from '$app/paths';
   import { Trophy, Home } from 'lucide-svelte';
 
@@ -149,9 +150,39 @@
     if (cleanupRoom) cleanupRoom();
     ws?.close();
   });
+
+  // Mobile control handlers
+  function handleMobileThrottle(value: number) {
+    engine?.['input']?.setMobileThrottle(value);
+  }
+
+  function handleMobileBrake(value: number) {
+    engine?.['input']?.setMobileBrake(value);
+  }
+
+  function handleMobileSteer(value: number) {
+    engine?.['input']?.setMobileSteer(value);
+  }
+
+  function handleMobileHandbrake(pressed: boolean) {
+    engine?.['input']?.setMobileHandbrake(pressed);
+  }
+
+  function handleMobileBoost(pressed: boolean) {
+    engine?.['input']?.setMobileBoost(pressed);
+  }
 </script>
 
 <div class="game-root" bind:this={container}></div>
+
+<!-- Mobile Controls -->
+<MobileControls
+  onThrottle={handleMobileThrottle}
+  onBrake={handleMobileBrake}
+  onSteer={handleMobileSteer}
+  onHandbrake={handleMobileHandbrake}
+  onBoost={handleMobileBoost}
+/>
 
 <div class="hud">
   <a class="home-btn" href={`${base}/`} aria-label="Home" title="Home" style="pointer-events:auto">
