@@ -86,6 +86,11 @@ export default class Track {
   public update(playerZ: number) {
     const playerSegment = Math.floor(playerZ / this.segmentLength);
     
+    // Only update if player has moved to a new segment
+    if (playerSegment <= this.currentSegment) {
+      return;
+    }
+    
     // Generate new segments ahead if needed
     while (playerSegment + 2 > this.currentSegment) {
       this.currentSegment++;

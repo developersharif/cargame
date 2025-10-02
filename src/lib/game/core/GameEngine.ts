@@ -37,6 +37,9 @@ export default class GameEngine {
   private throttleInput = 0;
   private steerSensitivity = 1;
   private environment?: Environment;
+  // Frame time smoothing to reduce stutter
+  private frameTimeBuffer: number[] = [];
+  private readonly frameTimeBufferSize = 5;
 
   public currentSpeed = 0;
 
@@ -154,7 +157,17 @@ export default class GameEngine {
 
   private loop = () => {
     if (!this.running) return;
-    const dt = this.clock.getDelta();
+    // Cap and smooth delta time to prevent physics spikes and stuttering
+    const rawDt = this.clock.getDelta();
+    const cappedDt = Math.min(rawDt, 0.1); // Cap at 100ms (10 FPS minimum)
+    
+    // Smooth frame time using rolling average to reduce microstutters
+    this.frameTimeBuffer.push(cappedDt);
+    if (this.frameTimeBuffer.length > this.frameTimeBufferSize) {
+      this.frameTimeBuffer.shift();
+    }
+    const dt = this.frameTimeBuffer.reduce((sum, t) => sum + t, 0) / this.frameTimeBuffer.length;
+    
     this.update(dt);
     this.render();
     requestAnimationFrame(this.loop);

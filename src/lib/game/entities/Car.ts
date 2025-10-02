@@ -30,6 +30,11 @@ export default class Car {
   private boost = false;
   private boostCharge = 1; // 0..1
   private tmp = new THREE.Vector3();
+  // Reusable vectors to avoid GC pressure
+  private tmpForward = new THREE.Vector3();
+  private tmpVForward = new THREE.Vector3();
+  private tmpVLateral = new THREE.Vector3();
+  private tmpAccel = new THREE.Vector3();
   private wheels: { fl: THREE.Group; fr: THREE.Group; rl: THREE.Group; rr: THREE.Group } | null = null;
   private headlights: THREE.Mesh[] = [];
   private brakelights: THREE.Mesh[] = [];
@@ -39,6 +44,9 @@ export default class Car {
   private reverseLights: THREE.Mesh[] = [];
   private reverseLightPoints: THREE.PointLight[] = [];
   private prevForwardSpeed = 0; // for detecting deceleration
+  
+  // Shared tire texture to avoid recreating for each car instance
+  private static sharedTireTexture: THREE.CanvasTexture | null = null;
 
   constructor(public config: CarConfig, color = 0x2196f3) {
   // Visual container (allows body roll/pitch without affecting physics root)
@@ -291,7 +299,7 @@ export default class Car {
   }
 
   private createRealisticWheels() {
-    // Realistic tire material with texture
+    // Realistic tire material with shared texture for performance
     const createTireMaterial = () => {
       const material = new THREE.MeshStandardMaterial({
         color: 0x1a1a1a,
@@ -299,28 +307,30 @@ export default class Car {
         metalness: 0.0
       });
       
-      // Create simple tire tread texture
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 128;
-      const ctx = canvas.getContext('2d')!;
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(0, 0, 128, 128);
-      
-      // Add tread pattern
-      ctx.strokeStyle = '#0f0f0f';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 128; i += 8) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(128, i);
-        ctx.stroke();
+      // Create or reuse tire tread texture (only once for all cars)
+      if (!Car.sharedTireTexture) {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 128;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, 128, 128);
+        
+        // Add tread pattern
+        ctx.strokeStyle = '#0f0f0f';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 128; i += 8) {
+          ctx.beginPath();
+          ctx.moveTo(0, i);
+          ctx.lineTo(128, i);
+          ctx.stroke();
+        }
+        
+        Car.sharedTireTexture = new THREE.CanvasTexture(canvas);
+        Car.sharedTireTexture.wrapS = Car.sharedTireTexture.wrapT = THREE.RepeatWrapping;
+        Car.sharedTireTexture.repeat.set(4, 4);
       }
       
-      const treadTexture = new THREE.CanvasTexture(canvas);
-      treadTexture.wrapS = treadTexture.wrapT = THREE.RepeatWrapping;
-      treadTexture.repeat.set(4, 4);
-      material.map = treadTexture;
-      
+      material.map = Car.sharedTireTexture;
       return material;
     };
 
@@ -657,22 +667,23 @@ export default class Car {
     this.heading += steerAmount * dt;
     this.group.rotation.y = this.heading;
 
-    // Forward direction (local +Z)
-    const forward = this.tmp.set(Math.sin(this.heading), 0, Math.cos(this.heading)).normalize();
+    // Forward direction (local +Z) - reuse tmpForward to avoid allocation
+    const forward = this.tmpForward.set(Math.sin(this.heading), 0, Math.cos(this.heading)).normalize();
 
     // Acceleration and braking
   const accelMul = boostActive ? boostCfg.multiplier : 1;
   const accel = cfg.acceleration * accelMul * this.throttle;
     const brakeDecel = cfg.braking * this.brake;
 
-  // Decompose velocity into forward/lateral components
+  // Decompose velocity into forward/lateral components - reuse vectors
   const forwardComponent = this.velocity.dot(forward); // signed speed along forward (+ forward, - reverse)
-  let vForward = forward.clone().multiplyScalar(forwardComponent);
-  let vLateral = this.velocity.clone().sub(vForward);
+  this.tmpVForward.copy(forward).multiplyScalar(forwardComponent);
+  this.tmpVLateral.copy(this.velocity).sub(this.tmpVForward);
 
     // Throttle applies forward accel
     if (accel > 0) {
-      vForward.add(forward.clone().multiplyScalar(accel * dt));
+      this.tmpAccel.copy(forward).multiplyScalar(accel * dt);
+      this.tmpVForward.add(this.tmpAccel);
     }
 
     // Braking or reverse behavior
@@ -681,16 +692,17 @@ export default class Car {
       if (forwardComponent > forwardThreshold) {
         // Moving forward: brake reduces forward speed
         const newLen = Math.max(0, forwardComponent - brakeDecel * dt);
-        vForward.copy(forward).multiplyScalar(newLen);
+        this.tmpVForward.copy(forward).multiplyScalar(newLen);
       } else {
         // Stopped or moving backward: engage reverse acceleration
         const reverseAccel = cfg.acceleration * cfg.reverseScale * this.brake;
-        vForward.add(forward.clone().multiplyScalar(-reverseAccel * dt));
+        this.tmpAccel.copy(forward).multiplyScalar(-reverseAccel * dt);
+        this.tmpVForward.add(this.tmpAccel);
         // Limit reverse speed
         const maxReverse = cfg.maxSpeed * cfg.reverseScale;
-        const revAlongForward = vForward.dot(forward); // negative when reversing
+        const revAlongForward = this.tmpVForward.dot(forward); // negative when reversing
         if (-revAlongForward > maxReverse) {
-          vForward.copy(forward).multiplyScalar(-maxReverse);
+          this.tmpVForward.copy(forward).multiplyScalar(-maxReverse);
         }
       }
     }
@@ -698,10 +710,10 @@ export default class Car {
     // Lateral grip (damp side slip), reduced when handbrake is held
     const effectiveGrip = cfg.lateralGrip * (this.handbrake ? cfg.handbrakeGrip : 1);
     const gripFactor = Math.max(0, 1 - effectiveGrip * dt);
-    vLateral.multiplyScalar(gripFactor);
+    this.tmpVLateral.multiplyScalar(gripFactor);
 
     // Recombine
-    this.velocity.copy(vForward.add(vLateral));
+    this.velocity.copy(this.tmpVForward).add(this.tmpVLateral);
 
     // Drag
     this.velocity.multiplyScalar(Math.max(0, 1 - cfg.drag * dt));
@@ -715,11 +727,11 @@ export default class Car {
     } else if (forwardSpeed < 0) {
       const maxReverse = cfg.maxSpeed * cfg.reverseScale;
       if (Math.abs(forwardSpeed) > maxReverse) {
-        // clamp reverse by scaling along forward axis
-        const vFor = forward.clone().multiplyScalar(forwardSpeed);
-        const vLat = this.velocity.clone().sub(vFor);
-        const clampedFor = forward.clone().multiplyScalar(-maxReverse);
-        this.velocity.copy(clampedFor.add(vLat));
+        // clamp reverse by scaling along forward axis - reuse vectors
+        this.tmpVForward.copy(forward).multiplyScalar(forwardSpeed);
+        this.tmpVLateral.copy(this.velocity).sub(this.tmpVForward);
+        this.tmpVForward.copy(forward).multiplyScalar(-maxReverse);
+        this.velocity.copy(this.tmpVForward).add(this.tmpVLateral);
       }
     }
 
@@ -735,20 +747,21 @@ export default class Car {
       const steerAngle = THREE.MathUtils.degToRad(25) * this.steering;
       this.wheels.fl.rotation.y = steerAngle;
       this.wheels.fr.rotation.y = steerAngle;
-      // spin: project velocity on local forward
-      const forward = this.tmp.set(Math.sin(this.heading), 0, Math.cos(this.heading)).normalize();
-      const forwardSpeed = this.velocity.dot(forward);
-      const spin = (forwardSpeed / (2 * Math.PI * 0.28)) * 2 * Math.PI * dt; // circumference r=0.28
+      // spin: project velocity on local forward (reuse forward vector)
+      const wheelForwardSpeed = this.velocity.dot(forward);
+      const spin = (wheelForwardSpeed / (2 * Math.PI * 0.28)) * 2 * Math.PI * dt; // circumference r=0.28
       for (const w of [this.wheels.fl, this.wheels.fr, this.wheels.rl, this.wheels.rr]) {
         // cylinders rotated on Z, spin around X
         w.children.forEach((c) => (c.rotation.x -= spin));
       }
 
       // simple suspension compression: move wheel groups a bit based on accel/brake
-      const lat = this.velocity.clone().sub(forward.clone().multiplyScalar(forwardSpeed));
-      const accel = (forwardSpeed - 0) / Math.max(1e-6, dt); // approx, since we don't store previous speed
-      const pitch = THREE.MathUtils.clamp((-accel) * 0.0008, -0.06, 0.06); // nose up on accel, down on brake
-      const roll = THREE.MathUtils.clamp(-lat.x * 0.02, -0.1, 0.1); // roll opposite to lateral slip
+      this.tmpVLateral.copy(this.velocity);
+      this.tmpVForward.copy(forward).multiplyScalar(wheelForwardSpeed);
+      this.tmpVLateral.sub(this.tmpVForward); // lateral component
+      const accelForVis = (wheelForwardSpeed - 0) / Math.max(1e-6, dt); // approx, since we don't store previous speed
+      const pitch = THREE.MathUtils.clamp((-accelForVis) * 0.0008, -0.06, 0.06); // nose up on accel, down on brake
+      const roll = THREE.MathUtils.clamp(-this.tmpVLateral.x * 0.02, -0.1, 0.1); // roll opposite to lateral slip
       // Smooth toward target
       this.visuals.rotation.x += (pitch - this.visuals.rotation.x) * Math.min(1, 8 * dt);
       this.visuals.rotation.z += (roll - this.visuals.rotation.z) * Math.min(1, 8 * dt);

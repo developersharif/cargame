@@ -24,7 +24,7 @@ export default class Environment {
     const sunLight = new THREE.DirectionalLight(0xfff8dc, 3.0);
     sunLight.position.set(100, 150, 50);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.setScalar(4096); // Reduced for performance
+    sunLight.shadow.mapSize.setScalar(2048); // Optimized for performance (was 4096)
     sunLight.shadow.camera.near = 0.1;
     sunLight.shadow.camera.far = 1000;
     sunLight.shadow.camera.left = -200;
@@ -32,7 +32,7 @@ export default class Environment {
     sunLight.shadow.camera.top = 200;
     sunLight.shadow.camera.bottom = -200;
     sunLight.shadow.bias = -0.0001;
-    sunLight.shadow.radius = 8; // Reduced for performance
+    sunLight.shadow.radius = 4; // Reduced for performance
     
     // Secondary fill light for better illumination
     const fillLight = new THREE.DirectionalLight(0x87CEEB, 0.8);
@@ -53,6 +53,7 @@ export default class Environment {
 
   // Update environment based on player position
   public update(playerZ: number) {
+    // Only update when player has moved significantly to reduce overhead
     const moved = Math.abs(playerZ - this.lastPlayerZ);
     if (moved > this.segmentSize / 2) {
       this.updateGroundSegments(playerZ);
