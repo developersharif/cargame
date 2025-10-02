@@ -1,0 +1,1 @@
+import{w as t}from"./DeGFAstr.js";const s={graphics:{quality:"medium",shadows:!0,reflections:!0,particles:!0,antialiasing:!0,resolution:1},audio:{master:.7,effects:.65,music:.45,engine:.65,spatial:!0},controls:{sensitivity:1},gameplay:{difficulty:"normal",assists:{autoBreak:!1,steeringAssist:!0,stabilization:!0},camera:"chase",gameMode:"sunny"}},a=t(s);export{a as s};
