@@ -44,10 +44,11 @@ export default class InputManager {
     }
     
     // Keyboard steering (binary: -1, 0, or 1)
+    // Left = POSITIVE (counter-clockwise in Three.js), Right = NEGATIVE (clockwise)
     const left = this.keys.has('ArrowLeft') || this.keys.has('KeyA');
     const right = this.keys.has('ArrowRight') || this.keys.has('KeyD');
-    if (left && !right) return -1;
-    if (right && !left) return 1;
+    if (left && !right) return 1;  // Left arrow = turn left = positive
+    if (right && !left) return -1; // Right arrow = turn right = negative
     return 0;
   }
   

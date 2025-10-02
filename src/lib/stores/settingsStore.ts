@@ -29,6 +29,7 @@ export interface GameSettings {
       stabilization: boolean;
     };
     camera: 'chase' | 'hood' | 'cockpit' | 'cinematic';
+    gameMode: 'sunny' | 'cloudy' | 'horror';
   };
 }
 
@@ -46,7 +47,8 @@ const defaultSettings: GameSettings = {
   gameplay: {
     difficulty: 'normal',
     assists: { autoBreak: false, steeringAssist: true, stabilization: true },
-    camera: 'chase'
+    camera: 'chase',
+    gameMode: 'sunny'
   }
 };
 

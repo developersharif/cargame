@@ -34,6 +34,14 @@ export default class AudioSystem {
 
   // Cached buffer(s)
   private noiseBuffer?: AudioBuffer;
+  
+  // Horror mode ambient
+  private horrorAmbient?: OscillatorNode;
+  private horrorFilter?: BiquadFilterNode;
+  private horrorGain?: GainNode;
+  private horrorDrone?: OscillatorNode;
+  private horrorDroneGain?: GainNode;
+  private horrorActive = false;
 
   constructor(private camera: THREE.Camera) {
     this.listener = new THREE.AudioListener();
@@ -221,7 +229,206 @@ export default class AudioSystem {
     return buffer;
   }
 
+  /**
+   * Enable horror ambient sounds: deep drones, eerie whispers, unsettling tones
+   */
+  public enableHorrorAmbient() {
+    if (this.horrorActive) return;
+    this.horrorActive = true;
+
+    // Deep ominous drone (very low frequency)
+    this.horrorDrone = this.ctx.createOscillator();
+    this.horrorDrone.type = 'sine';
+    this.horrorDrone.frequency.value = 35; // Deep sub-bass
+    this.horrorDroneGain = this.ctx.createGain();
+    this.horrorDroneGain.gain.value = 0;
+    this.horrorDrone.connect(this.horrorDroneGain).connect(this.musicBus);
+    this.horrorDrone.start();
+
+    // Fade in drone slowly
+    const t = this.ctx.currentTime;
+    this.horrorDroneGain.gain.setTargetAtTime(0.12, t, 2.0);
+
+    // Eerie high-pitched ambient (like distant whispers)
+    this.horrorAmbient = this.ctx.createOscillator();
+    this.horrorAmbient.type = 'triangle';
+    this.horrorAmbient.frequency.value = 1800;
+    
+    this.horrorFilter = this.ctx.createBiquadFilter();
+    this.horrorFilter.type = 'bandpass';
+    this.horrorFilter.frequency.value = 2200;
+    this.horrorFilter.Q.value = 8;
+    
+    this.horrorGain = this.ctx.createGain();
+    this.horrorGain.gain.value = 0;
+
+    this.horrorAmbient.connect(this.horrorFilter).connect(this.horrorGain).connect(this.musicBus);
+    this.horrorAmbient.start();
+
+    // Fade in whispers slowly with modulation
+    this.horrorGain.gain.setTargetAtTime(0.035, t, 3.0);
+
+    // Modulate the ambient for unsettling feeling
+    this.animateHorrorAmbient();
+  }
+
+  /**
+   * Disable horror ambient sounds
+   */
+  public disableHorrorAmbient() {
+    if (!this.horrorActive) return;
+    this.horrorActive = false;
+
+    const t = this.ctx.currentTime;
+
+    // Fade out
+    if (this.horrorGain) {
+      this.horrorGain.gain.setTargetAtTime(0, t, 1.0);
+    }
+    if (this.horrorDroneGain) {
+      this.horrorDroneGain.gain.setTargetAtTime(0, t, 1.5);
+    }
+
+    // Stop after fade
+    setTimeout(() => {
+      try { this.horrorAmbient?.stop(); } catch {}
+      try { this.horrorDrone?.stop(); } catch {}
+      this.horrorAmbient?.disconnect();
+      this.horrorDrone?.disconnect();
+      this.horrorFilter?.disconnect();
+      this.horrorGain?.disconnect();
+      this.horrorDroneGain?.disconnect();
+      this.horrorAmbient = undefined;
+      this.horrorDrone = undefined;
+      this.horrorFilter = undefined;
+      this.horrorGain = undefined;
+      this.horrorDroneGain = undefined;
+    }, 2000);
+  }
+
+  /**
+   * Create random eerie sound effects (whispers, creaks, distant screams)
+   */
+  public playHorrorEffect(type: 'whisper' | 'creak' | 'distant-scream' | 'heartbeat' = 'whisper') {
+    const t = this.ctx.currentTime;
+
+    if (type === 'whisper') {
+      // Reversed, filtered noise burst (like backwards speech)
+      if (!this.noiseBuffer) this.noiseBuffer = this.createNoiseBuffer(0.3);
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      src.playbackRate.value = 0.5; // Slowed down
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1500 + Math.random() * 1000;
+      filter.Q.value = 12;
+      
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.15, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      
+      src.connect(filter).connect(g).connect(this.musicBus);
+      src.start(t);
+      src.stop(t + 0.6);
+    } else if (type === 'creak') {
+      // Low frequency sine sweep (door creak)
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(80, t + 0.8);
+      
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.08, t + 0.1);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+      
+      osc.connect(g).connect(this.effectsBus);
+      osc.start(t);
+      osc.stop(t + 1.0);
+    } else if (type === 'distant-scream') {
+      // High pitched FM synthesis (distant scream)
+      const carrier = this.ctx.createOscillator();
+      carrier.type = 'sine';
+      carrier.frequency.value = 800;
+      
+      const mod = this.ctx.createOscillator();
+      mod.type = 'sine';
+      mod.frequency.value = 12;
+      
+      const modGain = this.ctx.createGain();
+      modGain.gain.value = 200;
+      
+      mod.connect(modGain).connect(carrier.frequency);
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 500;
+      
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.2);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+      
+      carrier.connect(filter).connect(g).connect(this.musicBus);
+      carrier.start(t);
+      mod.start(t);
+      carrier.stop(t + 1.6);
+      mod.stop(t + 1.6);
+    } else if (type === 'heartbeat') {
+      // Double thump (heartbeat)
+      for (let i = 0; i < 2; i++) {
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 60;
+        
+        const g = this.ctx.createGain();
+        const startTime = t + i * 0.15;
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, startTime + 0.1);
+        
+        osc.connect(g).connect(this.effectsBus);
+        osc.start(startTime);
+        osc.stop(startTime + 0.12);
+      }
+    }
+  }
+
+  private animateHorrorAmbient() {
+    if (!this.horrorActive || !this.horrorAmbient || !this.horrorFilter || !this.horrorGain) return;
+
+    const t = this.ctx.currentTime;
+    
+    // Slowly modulate frequency for unsettling feeling
+    const newFreq = 1600 + Math.sin(t * 0.3) * 400 + Math.random() * 200;
+    this.horrorAmbient.frequency.setTargetAtTime(newFreq, t, 2.0);
+    
+    // Modulate filter
+    const filterFreq = 2000 + Math.sin(t * 0.5) * 600;
+    this.horrorFilter.frequency.setTargetAtTime(filterFreq, t, 1.5);
+    
+    // Subtle volume pulse
+    const vol = 0.03 + Math.sin(t * 0.2) * 0.01;
+    this.horrorGain.gain.setTargetAtTime(vol, t, 1.0);
+    
+    // Modulate drone
+    if (this.horrorDrone) {
+      const droneFreq = 33 + Math.sin(t * 0.1) * 5;
+      this.horrorDrone.frequency.setTargetAtTime(droneFreq, t, 3.0);
+    }
+
+    // Continue animation
+    if (this.horrorActive) {
+      setTimeout(() => this.animateHorrorAmbient(), 500);
+    }
+  }
+
   public destroy() {
+    // Stop horror ambient
+    this.disableHorrorAmbient();
+
     // Stop engine
     try { this.engineOsc?.stop(); } catch {}
     try { this.subOsc?.stop(); } catch {}

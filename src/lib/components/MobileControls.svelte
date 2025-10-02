@@ -123,9 +123,10 @@
     const clampedDistance = Math.min(distance, joystickRadius);
     const angle = Math.atan2(dy, dx);
 
-    // Use horizontal component for steering (negate for correct direction)
-    // Left swipe (negative dx) = turn left (negative steerValue)
-    steerValue = -(dx / joystickRadius);
+    // Use horizontal component for steering
+    // Swipe left (negative dx) = turn left = POSITIVE steerValue (counter-clockwise)
+    // Swipe right (positive dx) = turn right = NEGATIVE steerValue (clockwise)
+    steerValue = -dx / joystickRadius; // Inverted to match Three.js rotation
     steerValue = Math.max(-1, Math.min(1, steerValue));
 
     onSteer(steerValue);

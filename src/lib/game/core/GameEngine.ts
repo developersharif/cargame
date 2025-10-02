@@ -14,6 +14,10 @@ import AudioSystem from '../systems/AudioSystem';
 import ScoreSystem from '../systems/ScoreSystem';
 import EffectsSystem from '../systems/EffectsSystem';
 import Environment from '../entities/Environment';
+import GameMode from '../modes/GameMode';
+import SunnyMode from '../modes/SunnyMode';
+import CloudyMode from '../modes/CloudyMode';
+import HorrorMode from '../modes/HorrorMode';
 
 export default class GameEngine {
   private scene: THREE.Scene;
@@ -37,6 +41,7 @@ export default class GameEngine {
   private throttleInput = 0;
   private steerSensitivity = 1;
   private environment?: Environment;
+  private gameMode?: GameMode;
   // Frame time smoothing to reduce stutter
   private frameTimeBuffer: number[] = [];
   private readonly frameTimeBufferSize = 5;
@@ -79,6 +84,9 @@ export default class GameEngine {
     this.container.appendChild(this.renderer.domElement);
     window.addEventListener('resize', this.updateSize);
     this.disposeBag.push(() => window.removeEventListener('resize', this.updateSize));
+
+    // Initialize game mode based on settings
+    this.initializeGameMode(s.gameplay.gameMode);
 
     // Create beautiful environment first (this will set up the sky)
     this.environment = new Environment(this.renderer);
@@ -197,6 +205,9 @@ export default class GameEngine {
     // Update infinite environment
     this.environment?.update(this.car.group.position.z);
 
+    // Update game mode environment effects
+    this.gameMode?.updateEnvironment(deltaTime, this.car.group.position);
+
     // Update score system
     this.score.update(deltaTime, this.car.group.position, this.currentSpeed);
 
@@ -268,8 +279,9 @@ export default class GameEngine {
     this.clock.stop();
     this.disposeBag.forEach((fn) => fn());
     this.unsubSettings?.();
-  this.environment?.dispose(this.scene);
-  ResourceManager.disposeScene(this.scene);
+    this.gameMode?.dispose();
+    this.environment?.dispose(this.scene);
+    ResourceManager.disposeScene(this.scene);
     this.renderer.dispose();
     this.input.destroy();
     this.audio?.destroy();
@@ -296,5 +308,69 @@ export default class GameEngine {
     const s = get(settings);
     this.steerSensitivity = s?.controls?.sensitivity ?? 1;
     this.audio?.updateFromSettings(s as any);
+  }
+
+  private initializeGameMode(mode: 'sunny' | 'cloudy' | 'horror') {
+    // Disable horror audio if switching away from horror mode
+    if (this.audio) {
+      if (mode !== 'horror') {
+        this.audio.disableHorrorAmbient();
+      } else {
+        // Enable horror audio for horror mode
+        this.audio.enableHorrorAmbient();
+        
+        // Start random horror effects
+        this.startHorrorEffects();
+      }
+    }
+
+    // Dispose old game mode if exists
+    this.gameMode?.dispose();
+
+    // Create new game mode
+    switch (mode) {
+      case 'sunny':
+        this.gameMode = new SunnyMode();
+        break;
+      case 'cloudy':
+        this.gameMode = new CloudyMode();
+        break;
+      case 'horror':
+        this.gameMode = new HorrorMode();
+        break;
+    }
+
+    // Initialize the game mode
+    this.gameMode.initialize(this.scene, this.renderer);
+  }
+
+  public switchGameMode(mode: 'sunny' | 'cloudy' | 'horror') {
+    this.initializeGameMode(mode);
+  }
+
+  private startHorrorEffects() {
+    const playRandomEffect = () => {
+      if (!this.audio || !this.running) return;
+      
+      // Random interval between effects (8-25 seconds)
+      const delay = 8000 + Math.random() * 17000;
+      
+      setTimeout(() => {
+        if (!this.audio || !this.running) return;
+        
+        // Choose random effect
+        const effects: Array<'whisper' | 'creak' | 'distant-scream' | 'heartbeat'> = 
+          ['whisper', 'creak', 'distant-scream', 'heartbeat'];
+        const effect = effects[Math.floor(Math.random() * effects.length)];
+        
+        this.audio.playHorrorEffect(effect);
+        
+        // Continue the loop
+        playRandomEffect();
+      }, delay);
+    };
+    
+    // Start the effect loop
+    playRandomEffect();
   }
 }

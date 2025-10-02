@@ -219,7 +219,6 @@
     margin: 0;
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     color: white;
   }
@@ -231,7 +230,7 @@
     align-items: center;
     justify-content: center;
     padding: 2rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: transparent;
     position: relative;
   }
 
@@ -245,7 +244,7 @@
     background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
       repeat;
     pointer-events: none;
-    opacity: 0.1;
+    opacity: 0.08;
   }
 
   .hero {
@@ -557,8 +556,6 @@
   }
 
   @media (prefers-color-scheme: dark) {
-    .container {
-      background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-    }
+    /* Background is now global in layout */
   }
 </style>

@@ -19,6 +19,12 @@
   let combo = 0;
 
   onMount(() => {
+    // Prevent scrolling during game
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    }
+
     if (!container) return;
     engine = new GameEngine(container);
     engine.init();
@@ -51,6 +57,12 @@
   onDestroy(() => {
     engine?.destroy();
     engine = null;
+
+    // Restore scrolling when leaving game page
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    }
   });
   function toggleMute() {
     const s = get(settings);
@@ -159,14 +171,6 @@
 </div>
 
 <style>
-  :global(html, body) {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    height: 100vh;
-    width: 100vw;
-  }
-
   .game-root {
     position: fixed;
     inset: 0;

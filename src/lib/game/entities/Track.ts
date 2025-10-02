@@ -150,9 +150,11 @@ export default class Track {
       const x = (Math.random() - 0.5) * 18; // Slightly smaller range
       const z = startZ + Math.random() * this.segmentLength;
       
-      cone.position.set(x, 0.4, z);
+      cone.position.set(x, 0.4, z); // Fixed position on ground (y=0.4)
       cone.castShadow = true;
       cone.receiveShadow = true;
+      cone.matrixAutoUpdate = false; // Static object - no automatic matrix updates
+      cone.updateMatrix(); // Update matrix once and freeze
       segment.add(cone);
       
       // Add collision for this cone
@@ -174,9 +176,11 @@ export default class Track {
       const x = side * 18;
       const z = startZ + Math.random() * this.segmentLength;
       
-      barrier.position.set(x, 0.6, z);
+      barrier.position.set(x, 0.6, z); // Fixed position on ground (y=0.6)
       barrier.castShadow = true;
       barrier.receiveShadow = true;
+      barrier.matrixAutoUpdate = false; // Static object - no automatic matrix updates
+      barrier.updateMatrix(); // Update matrix once and freeze
       segment.add(barrier);
       
       // Add collision
@@ -211,15 +215,19 @@ export default class Track {
       const z = startZ + Math.random() * this.segmentLength;
       const scale = 0.8 + Math.random() * 0.4;
       
-      trunk.position.set(x, 1.5 * scale, z);
+      trunk.position.set(x, 1.5 * scale, z); // Fixed ground position
       trunk.scale.setScalar(scale);
       trunk.castShadow = false; // Disable shadows for performance
       trunk.receiveShadow = false;
+      trunk.matrixAutoUpdate = false; // Static object
+      trunk.updateMatrix();
       
-      crown.position.set(x, 3.2 * scale, z);
+      crown.position.set(x, 3.2 * scale, z); // Fixed position above trunk
       crown.scale.setScalar(scale);
       crown.castShadow = false; // Disable shadows for performance
       crown.receiveShadow = false;
+      crown.matrixAutoUpdate = false; // Static object
+      crown.updateMatrix();
       
       segment.add(trunk, crown);
       
@@ -250,17 +258,23 @@ export default class Track {
         const x = side * (12 + Math.random() * 3); // 12-15 units from center (closer to road)
         const z = startZ + (i + 1) * (this.segmentLength / (numLamps + 1));
         
-        pole.position.set(x, 4, z);
+        pole.position.set(x, 4, z); // Fixed ground position
         pole.castShadow = false; // Disable shadows for performance
         pole.receiveShadow = false;
+        pole.matrixAutoUpdate = false; // Static object
+        pole.updateMatrix();
         
-        lamp.position.set(x, 7.5, z);
+        lamp.position.set(x, 7.5, z); // Fixed position on pole
         lamp.castShadow = false; // Disable shadows for performance
+        lamp.matrixAutoUpdate = false; // Static object
+        lamp.updateMatrix();
         
         // Reduce point light intensity and range for performance
         const pointLight = new THREE.PointLight(0xffffcc, 0.3, 15); // Reduced intensity and range
-        pointLight.position.set(x, 7.5, z);
+        pointLight.position.set(x, 7.5, z); // Fixed light position
         pointLight.castShadow = false; // Disable shadow casting for performance
+        pointLight.matrixAutoUpdate = false; // Static light
+        pointLight.updateMatrix();
         
         segment.add(pole, lamp, pointLight);
         

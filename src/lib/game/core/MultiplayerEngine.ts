@@ -11,6 +11,10 @@ import Car from '../entities/Car';
 import { settings } from '$lib/stores/settingsStore';
 import { get } from 'svelte/store';
 import CollisionSystem from '../systems/CollisionSystem';
+import GameMode from '../modes/GameMode';
+import SunnyMode from '../modes/SunnyMode';
+import CloudyMode from '../modes/CloudyMode';
+import HorrorMode from '../modes/HorrorMode';
 
 export interface MPPlayerInfo {
   id: string;
@@ -31,6 +35,7 @@ export default class MultiplayerEngine {
   private track!: Track;
   private audio?: AudioSystem;
   private collision!: CollisionSystem;
+  private gameMode?: GameMode;
   private running = false;
   private disposeBag: Array<() => void> = [];
   // Frame time smoothing to reduce stutter
@@ -91,6 +96,9 @@ export default class MultiplayerEngine {
     this.container.appendChild(this.renderer.domElement);
     window.addEventListener('resize', this.updateSize);
     this.disposeBag.push(() => window.removeEventListener('resize', this.updateSize));
+
+    // Initialize game mode
+    this.initializeGameMode(s.gameplay.gameMode);
 
     // Environment & track
     this.environment = new Environment(this.renderer);
@@ -237,6 +245,9 @@ export default class MultiplayerEngine {
     this.track.update(local.car.group.position.z);
     this.environment?.update(local.car.group.position.z);
 
+    // Update game mode environment effects
+    this.gameMode?.updateEnvironment(deltaTime, local.car.group.position);
+
     // Show finish gate banner fade-in when approaching; does not affect physics
     if (this.finishGate && this.finishGateBannerMat) {
       const d = this.finishZ - local.car.group.position.z;
@@ -359,6 +370,7 @@ export default class MultiplayerEngine {
     this.running = false;
     this.clock.stop();
     this.disposeBag.forEach((fn) => fn());
+    this.gameMode?.dispose();
     this.environment?.dispose(this.scene);
     this.renderer.dispose();
     this.input.destroy();
@@ -712,5 +724,69 @@ export default class MultiplayerEngine {
     ctx.fillText(text, cx, cy);
     ctx.restore();
     return new THREE.CanvasTexture(canvas);
+  }
+
+  private initializeGameMode(mode: 'sunny' | 'cloudy' | 'horror') {
+    // Disable horror audio if switching away from horror mode
+    if (this.audio) {
+      if (mode !== 'horror') {
+        this.audio.disableHorrorAmbient();
+      } else {
+        // Enable horror audio for horror mode
+        this.audio.enableHorrorAmbient();
+        
+        // Start random horror effects
+        this.startHorrorEffects();
+      }
+    }
+
+    // Dispose old game mode if exists
+    this.gameMode?.dispose();
+
+    // Create new game mode
+    switch (mode) {
+      case 'sunny':
+        this.gameMode = new SunnyMode();
+        break;
+      case 'cloudy':
+        this.gameMode = new CloudyMode();
+        break;
+      case 'horror':
+        this.gameMode = new HorrorMode();
+        break;
+    }
+
+    // Initialize the game mode
+    this.gameMode.initialize(this.scene, this.renderer);
+  }
+
+  public switchGameMode(mode: 'sunny' | 'cloudy' | 'horror') {
+    this.initializeGameMode(mode);
+  }
+
+  private startHorrorEffects() {
+    const playRandomEffect = () => {
+      if (!this.audio || !this.running) return;
+      
+      // Random interval between effects (8-25 seconds)
+      const delay = 8000 + Math.random() * 17000;
+      
+      setTimeout(() => {
+        if (!this.audio || !this.running) return;
+        
+        // Choose random effect
+        const effects: Array<'whisper' | 'creak' | 'distant-scream' | 'heartbeat'> = 
+          ['whisper', 'creak', 'distant-scream', 'heartbeat'];
+        const effect = effects[Math.floor(Math.random() * effects.length)];
+        
+        this.audio.playHorrorEffect(effect);
+        
+        // Continue the loop
+        playRandomEffect();
+      }, delay);
+    };
+    
+    // Start the effect loop
+    playRandomEffect();
   }
 }

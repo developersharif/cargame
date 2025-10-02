@@ -23,6 +23,12 @@
   $: roomId = $page.params.roomId;
 
   onMount(() => {
+    // Prevent scrolling during game
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    }
+
     rm = new RoomManager();
     ws = null;
     const name = localStorage.getItem('playerName') || 'Anonymous';
@@ -149,6 +155,12 @@
     if (cleanupNet) clearInterval(cleanupNet);
     if (cleanupRoom) cleanupRoom();
     ws?.close();
+
+    // Restore scrolling when leaving game page
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    }
   });
 
   // Mobile control handlers
@@ -235,16 +247,12 @@
 {/if}
 
 <style>
-  :global(html, body) {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-  }
   .game-root {
     position: fixed;
     inset: 0;
     width: 100vw;
     height: 100vh;
+    overflow: hidden;
   }
   .hud {
     position: fixed;
